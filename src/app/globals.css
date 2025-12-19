@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+
+:root {
+  /* Light Ethereal Warmth 配色系统 */
+  --color-bg: #FFFDF5;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #F5F8FC;
+  --color-text: #2D2D2D;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #A3A9B2;
+  --color-primary: #E57373;
+  --color-primary-hover: #DE5F5F;
+  --color-primary-soft: #FBEAEA;
+  --color-secondary: #FFD54F;
+  --color-secondary-soft: #FFF4CC;
+  --color-accent: #8FB6E8;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Nunito', sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* 相机视频流样式 */
+.camera-feed {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+}
+
+/* 快门按钮动画 */
+.shutter-btn {
+  transition: transform 0.1s ease-in-out;
+}
+
+.shutter-btn:active {
+  transform: scale(0.9);
+}
+
+/* 收集格子动画 */
+.collection-slot {
+  transition: all 0.3s ease-in-out;
+}
+
+.collection-slot:hover {
+  transform: scale(1.05);
+}
+
+/* 飞入动画的图片 */
+.flying-image {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* 脉冲动画 */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* 扫描线动画 */
+@keyframes scan-line {
+  0% {
+    top: 0;
+  }
+  50% {
+    top: 100%;
+  }
+  100% {
+    top: 0;
+  }
+}
+
+.scan-line {
+  animation: scan-line 2s ease-in-out infinite;
+}
