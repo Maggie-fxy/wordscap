@@ -7,6 +7,7 @@ import confetti from 'canvas-confetti';
 import { useGame } from '@/context/GameContext';
 import { WordRecord } from '@/types';
 import { getWordById, getRandomOptions } from '@/data/wordBank';
+import { useSound } from '@/hooks/useSound';
 
 interface ReviewModeProps {
   onBack: () => void;
@@ -22,26 +23,30 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
   const [hintLevel, setHintLevel] = useState(0); // 0=无提示, 1=首字母, 2=首字母+末字母
   const [attemptCount, setAttemptCount] = useState(0); // 尝试次数
   const [showWrongHint, setShowWrongHint] = useState(false); // 显示错误提示
+  const { playClick, playSuccess, playError } = useSound();
 
-  // 获取可复习的单词（有收集记录且未掌握的）
+  // 获取可复习的单词（有收集记录且未掌握的，至少1张图片）
   const getReviewableWords = (): WordRecord[] => {
     return Object.values(userData.wordRecords).filter(
-      record => record.images.length > 0 && !record.mastered
+      record => record.images.length >= 1 && !record.mastered
     );
   };
 
   // 开始新的复习
   const startNewReview = () => {
     const reviewableRecords = getReviewableWords();
+    console.log('可复习的单词记录:', reviewableRecords);
     if (reviewableRecords.length === 0) return;
 
     // 随机选择一个单词
     const randomRecord = reviewableRecords[Math.floor(Math.random() * reviewableRecords.length)];
     const word = getWordById(randomRecord.wordId);
+    console.log('选中的单词:', word?.word, '图片数量:', randomRecord.images.length);
     if (!word) return;
 
     // 随机选择一张收集的图片
     const randomImage = randomRecord.images[Math.floor(Math.random() * randomRecord.images.length)];
+    console.log('选中的图片:', randomImage?.url);
     setCurrentImage(randomImage?.url || null);
 
     // 判断是选择题还是默写
@@ -114,37 +119,59 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
   const handleChoiceAnswer = (answer: string) => {
     if (selectedAnswer) return; // 已经选过了
     
+    playClick();
     setSelectedAnswer(answer);
     const correct = answer === reviewWord?.word;
     setIsCorrect(correct);
     
     if (correct) {
+      playSuccess();
       triggerConfetti();
+      // 正确后停留1.5秒，然后自动进入下一题
+      setTimeout(() => {
+        dispatch({ type: 'ANSWER_CHOICE', payload: answer });
+        // 再等0.5秒后自动开始下一题
+        setTimeout(() => {
+          startNewReview();
+        }, 500);
+      }, 1500);
+    } else {
+      playError();
+      dispatch({ type: 'ANSWER_CHOICE', payload: answer });
     }
-    
-    dispatch({ type: 'ANSWER_CHOICE', payload: answer });
   };
 
   // 处理默写答案
   const handleSpellingSubmit = () => {
     if (!spellingInput.trim()) return;
     
+    playClick();
     const correct = spellingInput.toLowerCase().trim() === reviewWord?.word.toLowerCase();
     const newAttemptCount = attemptCount + 1;
     setAttemptCount(newAttemptCount);
     
     if (correct) {
+      playSuccess();
       setIsCorrect(true);
       setShowWrongHint(false);
       triggerConfetti();
-      dispatch({ type: 'ANSWER_SPELLING', payload: spellingInput });
+      // 正确后停留1.5秒，然后自动进入下一题
+      setTimeout(() => {
+        dispatch({ type: 'ANSWER_SPELLING', payload: spellingInput });
+        // 再等0.5秒后自动开始下一题
+        setTimeout(() => {
+          startNewReview();
+        }, 500);
+      }, 1500);
     } else if (newAttemptCount >= 3) {
       // 第三次失败，无法获得碎片，直接显示结果
+      playError();
       setIsCorrect(false);
       setShowWrongHint(false);
       dispatch({ type: 'ANSWER_SPELLING', payload: '' }); // 传空字符串表示失败
     } else {
       // 还有机会，清空输入让用户重试
+      playError();
       setSpellingInput('');
       setShowWrongHint(true);
       // 2秒后隐藏错误提示
@@ -154,6 +181,7 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
 
   // 下一题
   const handleNext = () => {
+    playClick();
     startNewReview();
   };
 
@@ -167,18 +195,18 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
           animate={{ scale: 1, opacity: 1 }}
           className="text-center"
         >
-          <div className="w-24 h-24 bg-success rounded-full border border-success/50 flex items-center justify-center mx-auto mb-6">
-            <Check className="w-12 h-12 text-text-onPrimary" />
-          </div>
           <h2 className="text-2xl font-black text-text mb-2">暂无可复习的单词</h2>
-          <p className="text-text-secondary mb-6">去捕猎模式收集更多单词吧！</p>
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={onBack}
-            className="px-8 py-3 bg-primary hover:bg-primary-hover text-text-onPrimary rounded-2xl font-black shadow-soft-md"
-          >
-            返回捕猎
-          </motion.button>
+          <p className="text-text-secondary mb-10">去狩猎模式收集更多单词吧！</p>
+          <div className="flex justify-center">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onBack}
+              className="w-32 h-32 rounded-full bg-primary hover:bg-primary-hover shadow-soft-lg text-text-onPrimary font-black flex items-center justify-center hunting-button"
+            >
+              <span className="text-base font-black tracking-wide text-center">START<br/>HUNTING</span>
+            </motion.button>
+          </div>
         </motion.div>
       </div>
     );
@@ -235,31 +263,53 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
                   exit={{ opacity: 0, y: -20 }}
                   className="space-y-3"
                 >
-                  <p className="text-center text-text font-bold mb-4">这是什么？</p>
+                  <p className="text-center text-text font-black text-lg mb-4">这是什么？</p>
                   <div className="grid grid-cols-2 gap-3">
-                    {reviewOptions.map((option, index) => (
-                      <motion.button
-                        key={option.id}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: index * 0.1 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleChoiceAnswer(option.word)}
-                        disabled={selectedAnswer !== null}
-                        className={`p-4 rounded-2xl border font-bold text-lg transition-all ${
-                          selectedAnswer === option.word
-                            ? option.word === reviewWord.word
+                    {reviewOptions.map((option, index) => {
+                      const isSelected = selectedAnswer === option.word;
+                      const isCorrectAnswer = option.word === reviewWord.word;
+                      const showCorrect = selectedAnswer && isCorrectAnswer;
+                      const showWrong = isSelected && !isCorrectAnswer;
+                      
+                      return (
+                        <motion.button
+                          key={option.id}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ 
+                            opacity: 1, 
+                            scale: 1,
+                            x: showWrong ? [0, -5, 5, -5, 5, 0] : 0,
+                          }}
+                          transition={{ 
+                            delay: index * 0.1,
+                            x: { duration: 0.4 }
+                          }}
+                          whileTap={{ scale: 0.95 }}
+                          whileHover={{ scale: selectedAnswer ? 1 : 1.02 }}
+                          onClick={() => handleChoiceAnswer(option.word)}
+                          disabled={selectedAnswer !== null}
+                          className={`p-4 rounded-2xl border font-bold text-lg transition-all relative overflow-hidden ${
+                            showCorrect
                               ? 'bg-success/20 border-success shadow-soft'
-                              : 'bg-primary text-text-onPrimary border-primary shadow-soft'
-                            : selectedAnswer && option.word === reviewWord.word
-                              ? 'bg-success/20 border-success shadow-soft'
-                              : 'bg-bg-secondary border-text/10 shadow-card hover:shadow-soft-md'
-                        }`}
-                      >
-                        <span className="text-text">{option.word}</span>
-                        <span className="block text-sm text-text-secondary">{option.cn}</span>
-                      </motion.button>
-                    ))}
+                              : showWrong
+                                ? 'bg-primary text-text-onPrimary border-primary shadow-soft'
+                                : 'bg-bg-secondary border-text/10 shadow-card hover:shadow-soft-md'
+                          }`}
+                        >
+                          {/* 波纹效果 */}
+                          {isSelected && (
+                            <motion.div
+                              initial={{ scale: 0, opacity: 0.5 }}
+                              animate={{ scale: 4, opacity: 0 }}
+                              transition={{ duration: 0.6 }}
+                              className={`absolute inset-0 rounded-full ${isCorrectAnswer ? 'bg-success' : 'bg-primary'}`}
+                              style={{ transformOrigin: 'center' }}
+                            />
+                          )}
+                          <span className="text-text text-xl relative z-10">{option.word}</span>
+                        </motion.button>
+                      );
+                    })}
                   </div>
                 </motion.div>
               )}
@@ -277,7 +327,7 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
                       <span className="text-xs text-text-muted">
                         剩余 {3 - attemptCount} 次机会
                       </span>
-                      <p className="text-text font-bold">请拼写这个单词</p>
+                      <p className="text-text font-black text-lg">请拼写这个单词</p>
                       {/* 提示按钮 */}
                       <motion.button
                         whileTap={{ scale: 0.9 }}
@@ -293,8 +343,8 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
                         <Lightbulb className="w-4 h-4 text-text" />
                       </motion.button>
                     </div>
-                    <div className="inline-block bg-success/20 px-4 py-1 rounded-full border border-success">
-                      <span className="text-sm font-bold text-text">{reviewWord.cn}</span>
+                    <div className="inline-block bg-success/20 px-4 py-2 rounded-full border border-success">
+                      <span className="text-base font-black text-text">{reviewWord.cn}</span>
                     </div>
                   </div>
 
@@ -379,7 +429,7 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
                   </div>
                   
                   <div>
-                    <p className="text-2xl font-black text-text">{isCorrect ? '正确！' : '错误'}</p>
+                    <p className="text-3xl font-black text-text">{isCorrect ? '正确！' : '错误'}</p>
                     {!isCorrect && (
                       <p className="text-text-secondary mt-2">
                         正确答案: <span className="font-bold text-primary">{reviewWord.word}</span>
@@ -392,7 +442,7 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
                     onClick={handleNext}
                     className="px-8 py-3 bg-primary hover:bg-primary-hover text-text-onPrimary rounded-2xl font-black shadow-soft-md"
                   >
-                    下一题
+                    NEXT
                   </motion.button>
                 </motion.div>
               )}

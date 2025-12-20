@@ -3,14 +3,15 @@ export interface Word {
   id: string;
   word: string;
   cn: string;
-  hint: string; // 提示词
+  hint: string; // 中文提示词
+  hintEn?: string; // 英文提示词
   category: string;
   difficulty: 1 | 2 | 3;
   pronunciation?: string; // 音标
 }
 
 // 游戏模式
-export type GameMode = 'HUNTER' | 'REVIEW' | 'WORDBOOK';
+export type GameMode = 'HUNTER' | 'COLLECTION' | 'REVIEW' | 'WORDBOOK';
 
 // 游戏阶段
 export type GamePhase = 'IDLE' | 'CAMERA' | 'ANALYZING' | 'SUCCESS' | 'FAILED' | 'COMPLETED';

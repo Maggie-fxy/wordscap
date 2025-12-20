@@ -32,9 +32,22 @@ const initialState: GameState = {
   showHint: false,
 };
 
+// 清除数据开关：1=清除旧数据，0=正常加载
+const CLEAR_DATA_FLAG: number = 0;        //CLEAR_DATA_FLAG = 1 → 清除所有旧数据 CLEAR_DATA_FLAG = 0 → 正常加载数据（当前状态）
+
+
 // 从本地存储加载用户数据
 function loadUserData(): UserData {
   if (typeof window === 'undefined') return initialUserData;
+  
+  // 根据标志位决定是否清除数据
+  if (CLEAR_DATA_FLAG === 1) {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('wordcaps_shown_achievements');
+    console.log('已清除旧数据');
+    return initialUserData;
+  }
+  
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -106,6 +119,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
     case 'ANALYSIS_SUCCESS': {
+      // 防止重复处理：如果已经是SUCCESS状态，不再处理
+      if (state.phase === 'SUCCESS') {
+        return state;
+      }
+      
       const wordId = state.currentWord?.id || '';
       const newImage: CollectedImage = {
         url: action.payload.imageUrl,
@@ -120,17 +138,25 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       newUserData.diamonds += 1;
       newUserData.totalCollected += 1;
       
-      // 更新单词记录
+      // 更新单词记录 - 使用深拷贝避免引用问题
       if (wordId) {
-        const existingRecord = newUserData.wordRecords[wordId] || {
-          wordId,
-          images: [],
-          choiceCorrect: 0,
-          spellingCorrect: 0,
-          mastered: false,
+        const existingRecord = newUserData.wordRecords[wordId];
+        const updatedRecord = existingRecord 
+          ? {
+              ...existingRecord,
+              images: [...existingRecord.images, newImage],
+            }
+          : {
+              wordId,
+              images: [newImage],
+              choiceCorrect: 0,
+              spellingCorrect: 0,
+              mastered: false,
+            };
+        newUserData.wordRecords = {
+          ...newUserData.wordRecords,
+          [wordId]: updatedRecord,
         };
-        existingRecord.images = [...existingRecord.images, newImage];
-        newUserData.wordRecords[wordId] = existingRecord;
       }
       
       // 保存到本地存储
@@ -156,6 +182,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
     case 'FORCE_SUCCESS': {
+      // 防止重复处理：如果已经是SUCCESS状态，不再处理
+      if (state.phase === 'SUCCESS') {
+        return state;
+      }
+      
       const wordId = state.currentWord?.id || '';
       const newImage: CollectedImage = {
         url: action.payload,
@@ -170,16 +201,25 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       newUserData.diamonds += 1;
       newUserData.totalCollected += 1;
       
+      // 更新单词记录 - 使用深拷贝避免引用问题
       if (wordId) {
-        const existingRecord = newUserData.wordRecords[wordId] || {
-          wordId,
-          images: [],
-          choiceCorrect: 0,
-          spellingCorrect: 0,
-          mastered: false,
+        const existingRecord = newUserData.wordRecords[wordId];
+        const updatedRecord = existingRecord 
+          ? {
+              ...existingRecord,
+              images: [...existingRecord.images, newImage],
+            }
+          : {
+              wordId,
+              images: [newImage],
+              choiceCorrect: 0,
+              spellingCorrect: 0,
+              mastered: false,
+            };
+        newUserData.wordRecords = {
+          ...newUserData.wordRecords,
+          [wordId]: updatedRecord,
         };
-        existingRecord.images = [...existingRecord.images, newImage];
-        newUserData.wordRecords[wordId] = existingRecord;
       }
       
       saveUserData(newUserData);
