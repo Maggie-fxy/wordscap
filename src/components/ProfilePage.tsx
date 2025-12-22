@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Diamond, Trophy, Calendar, Hash, RotateCcw, Award, Star, Zap, Target, LogIn, LogOut, User } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useGame } from '@/context/GameContext';
+import { useSound } from '@/hooks/useSound';
 import { useAuth } from '@/context/AuthContext';
 import { AuthModal } from './AuthModal';
 
@@ -63,6 +64,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   const { state } = useGame();
   const { userData } = state;
   const { user, profile, signOut, isLoading: authLoading } = useAuth();
+  const { playClick } = useSound();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   // 计算已掌握的单词数
@@ -97,6 +99,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
   // 重置游戏
   const handleReset = () => {
+    playClick();
     if (confirm('确定要重置所有游戏进度吗？此操作不可撤销！')) {
       localStorage.removeItem('wordcaps_user_data');
       window.location.reload();
@@ -105,13 +108,20 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
 
   // 登出
   const handleSignOut = async () => {
+    playClick();
     if (confirm('确定要退出登录吗？')) {
       await signOut();
     }
   };
 
+  // 打开登录弹窗
+  const handleOpenAuth = () => {
+    playClick();
+    setShowAuthModal(true);
+  };
+
   return (
-    <div className="h-screen grass-bg flex flex-col overflow-hidden pb-20">
+    <div className="h-screen grass-bg flex flex-col overflow-y-auto pb-20">
       {/* Header */}
       <header className="px-4 py-6 text-center wood-bg border-b-4 border-[#5D4037]">
         <h1 className="text-2xl font-black text-white drop-shadow-md">🎫 My Hunter Pass</h1>
@@ -167,7 +177,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
               </button>
             ) : (
               <button
-                onClick={() => setShowAuthModal(true)}
+                onClick={handleOpenAuth}
                 className="flex items-center gap-1 text-xs text-white bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg font-bold transition-colors"
               >
                 <LogIn className="w-3 h-3" />
@@ -247,7 +257,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
       </div>
 
       {/* 成就区域 */}
-      <div className="px-4 mb-4 flex-1 overflow-auto">
+      <div className="px-4 mb-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -300,7 +310,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
       </div>
 
       {/* Footer - Reset Button */}
-      <div className="px-4 mt-auto">
+      <div className="px-4 mt-4 mb-4">
         <motion.button
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

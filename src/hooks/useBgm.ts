@@ -16,7 +16,7 @@ export function useBgm() {
   const hasAutoStartedRef = useRef(false); // 是否已自动启动过
 
   const getAudioContext = useCallback(() => {
-    if (!audioContextRef.current) {
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
     return audioContextRef.current;
@@ -136,6 +136,10 @@ export function useBgm() {
     if (nodesRef.current.masterGain && audioContextRef.current) {
       const ctx = audioContextRef.current;
       nodesRef.current.masterGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      try {
+        nodesRef.current.masterGain.disconnect();
+      } catch {}
+      nodesRef.current.masterGain = null;
     }
   }, []);
 
@@ -148,13 +152,31 @@ export function useBgm() {
     }
   }, [playBgm, stopBgm]);
 
+  // 默认开启背景音乐（进入页面就尝试播放）
+  useEffect(() => {
+    if (hasAutoStartedRef.current) return;
+    hasAutoStartedRef.current = true;
+    playBgm();
+  }, [playBgm]);
+
   // 首次用户交互时自动开启背景音乐
   useEffect(() => {
     const handleFirstInteraction = () => {
-      if (!hasAutoStartedRef.current && !isPlayingRef.current) {
-        hasAutoStartedRef.current = true;
+      // 某些浏览器会阻止无交互自动播放：此时 AudioContext 可能仍是 suspended
+      try {
+        const ctx = audioContextRef.current;
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume();
+        }
+      } catch (e) {
+        console.log('BGM resume failed:', e);
+      }
+
+      // 如果此前自动播放被拦截，首次交互时需要真正重新启动播放逻辑
+      if (!isPlayingRef.current) {
         playBgm();
       }
+
       // 移除监听器
       document.removeEventListener('click', handleFirstInteraction);
       document.removeEventListener('touchstart', handleFirstInteraction);

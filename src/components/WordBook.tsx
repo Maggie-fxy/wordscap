@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Star, X, Diamond, Lock, Sparkles } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
+import { useSound } from '@/hooks/useSound';
 import { getWordById, WORD_BANK } from '@/data/wordBank';
 import { Word, WordRecord } from '@/types';
 
@@ -243,6 +244,7 @@ function CollectedCard({ word, record, index, onClick }: { word: Word; record: W
 export function WordBook({ onBack }: WordBookProps) {
   const { state } = useGame();
   const { userData } = state;
+  const { playClick } = useSound();
   const [selectedWord, setSelectedWord] = useState<{ word: Word; record?: WordRecord } | null>(null);
 
   // 获取所有单词，区分已收集和未收集
@@ -320,7 +322,10 @@ export function WordBook({ onBack }: WordBookProps) {
                       word={item.word}
                       record={item.record!}
                       index={index}
-                      onClick={() => setSelectedWord({ word: item.word, record: item.record })}
+                      onClick={() => {
+                      playClick();
+                      setSelectedWord({ word: item.word, record: item.record });
+                    }}
                     />
                   ))}
                 </div>

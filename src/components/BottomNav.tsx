@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Target, BookOpen, GraduationCap, User } from 'lucide-react';
 import { GameMode } from '@/types';
+import { useSound } from '@/hooks/useSound';
 
 interface BottomNavProps {
   currentMode: GameMode;
@@ -10,6 +11,8 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ currentMode, onModeChange }: BottomNavProps) {
+  const { playClick } = useSound();
+  
   const navItems = [
     { mode: 'HUNTER' as GameMode, icon: Target, label: '狩猎' },
     { mode: 'COLLECTION' as GameMode, icon: BookOpen, label: '收集册' },
@@ -29,7 +32,10 @@ export function BottomNav({ currentMode, onModeChange }: BottomNavProps) {
               key={item.mode}
               whileTap={{ scale: 0.95, y: 2 }}
               whileHover={{ scale: 1.05 }}
-              onClick={() => onModeChange(item.mode)}
+              onClick={() => {
+                playClick();
+                onModeChange(item.mode);
+              }}
               className={`relative flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${
                 isActive 
                   ? 'bg-white border-4 border-[#5D4037] border-b-8' 

@@ -14,7 +14,9 @@ import { BottomNav } from '@/components/BottomNav';
 import { AchievementToast } from '@/components/AchievementToast';
 import { useSound } from '@/hooks/useSound';
 import { useBgm } from '@/hooks/useBgm';
+import { useTTS } from '@/hooks/useTTS';
 import { AIRecognitionResult, GameMode } from '@/types';
+import { compressImage } from '@/lib/imageUtils';
 
 // 成就定义
 const ACHIEVEMENTS = [
@@ -35,6 +37,7 @@ export default function HomePage() {
   const [showVictory, setShowVictory] = useState(false);
   const { playClick, playSuccess } = useSound();
   const { toggleBgm, isPlaying: isBgmPlaying } = useBgm();
+  const { speakEnglish } = useTTS();
   
   // 新增状态
   const [hintLevel, setHintLevel] = useState(0); // 0=无提示, 1=英文提示, 2=中文提示
@@ -44,6 +47,7 @@ export default function HomePage() {
   const [newImageUrl, setNewImageUrl] = useState<string | null>(null); // 新收集的图片URL（用于动画）
   const [showImageAnimation, setShowImageAnimation] = useState(false); // 显示图片飞入动画
   const [unlockedAchievement, setUnlockedAchievement] = useState<typeof ACHIEVEMENTS[0] | null>(null); // 新解锁的成就
+  const [analyzingText, setAnalyzingText] = useState<string>('🔍 豆包AI识别中...');
   const prevUserDataRef = useRef(userData); // 用于检测成就变化
   
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -116,6 +120,7 @@ export default function HomePage() {
 
   // 换词处理（带动画）- 必须在条件返回之前定义
   const handleSwitchWord = useCallback(() => {
+    playClick();
     setIsCardSwitching(true);
     setTimeout(() => {
       nextWord();
@@ -252,6 +257,7 @@ export default function HomePage() {
     isProcessingRef.current = true;
 
     try {
+      setAnalyzingText('🔍 豆包AI识别中...');
       const response = await fetch('/api/recognize', {
         method: 'POST',
         headers: {
@@ -278,11 +284,16 @@ export default function HomePage() {
       if (aiResult.is_match) {
         // 播放成功音效
         playSuccess();
+
+        // 识别成功提示（在抠图前给用户一个明确反馈）
+        setAnalyzingText('✅ 物品识别成功');
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // 根据标志位决定是否抠图
         let finalImageUrl = imageData;
         if (REMOVE_BG_FLAG === 1) {
           try {
+            setAnalyzingText('🎨 生成贴纸中...');
             const removeBgResponse = await fetch('/api/removebg', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -302,12 +313,20 @@ export default function HomePage() {
           console.log('抠图开关关闭，使用原图');
         }
         
+        // 压缩图片以避免localStorage溢出
+        try {
+          finalImageUrl = await compressImage(finalImageUrl, 400, 0.6);
+        } catch (e) {
+          console.log('图片压缩失败，使用原图:', e);
+        }
+        
         setNewImageUrl(finalImageUrl);
         setShowImageAnimation(true);
         dispatch({
           type: 'ANALYSIS_SUCCESS',
           payload: { result: aiResult, imageUrl: finalImageUrl },
         });
+        setAnalyzingText('');
         // 2秒后隐藏动画和重置锁
         setTimeout(() => {
           setShowImageAnimation(false);
@@ -316,12 +335,14 @@ export default function HomePage() {
         }, 2000);
       } else {
         dispatch({ type: 'ANALYSIS_FAILED', payload: aiResult });
+        setAnalyzingText('');
         isProcessingRef.current = false;
       }
     } catch (error) {
       console.error('分析错误:', error);
       dispatch({ type: 'SET_ERROR', payload: '网络错误，请重试' });
       dispatch({ type: 'RETRY' });
+      setAnalyzingText('');
       isProcessingRef.current = false;
     }
   };
@@ -360,6 +381,13 @@ export default function HomePage() {
       console.log('抠图开关关闭，使用原图');
     }
     
+    // 压缩图片以避免localStorage溢出
+    try {
+      finalImageUrl = await compressImage(finalImageUrl, 400, 0.6);
+    } catch (e) {
+      console.log('图片压缩失败，使用原图:', e);
+    }
+    
     setNewImageUrl(finalImageUrl);
     setShowImageAnimation(true);
     dispatch({ type: 'FORCE_SUCCESS', payload: finalImageUrl });
@@ -373,6 +401,7 @@ export default function HomePage() {
 
   // 使用提示（新逻辑：第一次英文，第二次中文）
   const handleUseHint = () => {
+    playClick();
     if (hintLevel === 0) {
       // 第一次点击：显示英文提示
       setHintLevel(1);
@@ -396,11 +425,9 @@ export default function HomePage() {
 
   // 发音
   const handleSpeak = () => {
-    if (currentWord && 'speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(currentWord.word);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.8;
-      speechSynthesis.speak(utterance);
+    if (currentWord) {
+      playClick();
+      speakEnglish(currentWord.word);
     }
   };
 
@@ -415,6 +442,7 @@ export default function HomePage() {
 
   // 停止相机
   const handleStopCamera = () => {
+    playClick();
     dispatch({ type: 'STOP_CAMERA' });
   };
 
@@ -561,6 +589,7 @@ export default function HomePage() {
                 onCapture={handleCapture}
                 onClose={handleStopCamera}
                 onForceSuccess={handleForceSuccess}
+                analyzingText={analyzingText}
               />
             </div>
           ) : (
@@ -592,6 +621,22 @@ export default function HomePage() {
                   </motion.button>
                 </div>
               )}
+              
+              {/* 拍照成功提示 */}
+              {phase === 'SUCCESS' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  className="flex-1 flex flex-col items-center justify-center"
+                >
+                  <div className="bg-[#66BB6A] rounded-3xl border-4 border-[#2E7D32] border-b-8 px-8 py-6 text-center">
+                    <p className="text-3xl mb-2">🎉</p>
+                    <p className="text-xl font-black text-white drop-shadow-md">太棒了！</p>
+                    <p className="text-sm font-bold text-white/90 mt-1">+1 💎 钻石碎片</p>
+                    <p className="text-xs text-white/70 mt-2">即将进入下一个单词...</p>
+                  </div>
+                </motion.div>
+              )}
             </div>
           )}
         </div>
@@ -617,9 +662,19 @@ export default function HomePage() {
       </AnimatePresence>
 
       {/* 底部倒计时进度条 - 左红右绿，丝滑动画 */}
-      <div className="fixed bottom-20 left-0 right-0 px-4 z-30">
+      <div className="fixed bottom-28 left-0 right-0 px-4 z-30">
+        {/* 倒计时秒数显示在进度条上方 */}
+        <div className="flex items-center justify-center mb-1">
+          <motion.span 
+            className={`text-lg font-black leading-none ${countdown <= 10 ? 'text-[#FF5252]' : 'text-[#5D4037]'}`}
+            animate={countdown <= 10 ? { scale: [1, 1.15, 1] } : {}}
+            transition={countdown <= 10 ? { duration: 0.5, repeat: Infinity } : {}}
+          >
+            ⏱️ {countdown}s
+          </motion.span>
+        </div>
         <motion.div 
-          className="h-4 bg-bg-tertiary rounded-full overflow-hidden"
+          className="h-3 bg-bg-tertiary rounded-full overflow-hidden"
           animate={countdown <= 10 ? { 
             scale: [1, 1.02, 1],
             boxShadow: ['0 0 0 0 rgba(229, 115, 115, 0)', '0 0 8px 2px rgba(229, 115, 115, 0.5)', '0 0 0 0 rgba(229, 115, 115, 0)']
@@ -637,13 +692,6 @@ export default function HomePage() {
             style={{ width: `${(countdown / 60) * 100}%` }}
           />
         </motion.div>
-        <motion.p 
-          className={`text-xs text-center mt-1 font-bold ${countdown <= 10 ? 'text-primary' : 'text-text-muted'}`}
-          animate={countdown <= 10 ? { scale: [1, 1.1, 1] } : {}}
-          transition={countdown <= 10 ? { duration: 0.5, repeat: Infinity } : {}}
-        >
-          {countdown}s
-        </motion.p>
       </div>
 
       {/* 底部导航栏 */}

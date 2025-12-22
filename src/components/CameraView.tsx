@@ -11,9 +11,10 @@ interface CameraViewProps {
   onCapture: (imageData: string) => void;
   onClose: () => void;
   onForceSuccess?: (imageData: string) => void;
+  analyzingText?: string;
 }
 
-export function CameraView({ onCapture, onClose, onForceSuccess }: CameraViewProps) {
+export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }: CameraViewProps) {
   const { videoRef, canvasRef, isStreaming, error, startCamera, stopCamera, captureImage } = useCamera();
   const { state, dispatch } = useGame();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -89,7 +90,7 @@ export function CameraView({ onCapture, onClose, onForceSuccess }: CameraViewPro
               <Loader2 className="w-10 h-10 text-[#5D4037]" strokeWidth={2.5} />
             </motion.div>
             <p className="text-white mt-4 text-lg font-black drop-shadow-md">
-              🔍 AI 正在识别...
+              {analyzingText || '🔍 AI 正在识别...'}
             </p>
           </motion.div>
         )}

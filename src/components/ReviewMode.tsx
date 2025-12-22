@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X, Keyboard, ArrowLeft, Lightbulb } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -13,6 +13,16 @@ interface ReviewModeProps {
   onBack: () => void;
 }
 
+// 检查图片URL是否有效
+const isValidImageUrl = (url: string | undefined | null): boolean => {
+  if (!url) return false;
+  // 检查是否是base64图片
+  if (url.startsWith('data:image/')) return true;
+  // 检查是否是http/https URL
+  if (url.startsWith('http://') || url.startsWith('https://')) return true;
+  return false;
+};
+
 export function ReviewMode({ onBack }: ReviewModeProps) {
   const { state, dispatch } = useGame();
   const { userData, reviewWord, reviewOptions, reviewPhase } = state;
@@ -24,18 +34,64 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
   const [attemptCount, setAttemptCount] = useState(0); // 尝试次数
   const [showWrongHint, setShowWrongHint] = useState(false); // 显示错误提示
   const { playClick, playSuccess, playError } = useSound();
+  
+  // 定时器引用，用于清理
+  const timersRef = useRef<NodeJS.Timeout[]>([]);
+  // 组件是否已卸载
+  const isMountedRef = useRef(true);
+  // 是否正在处理中，防止重复触发
+  const isProcessingRef = useRef(false);
+  
+  // 清理所有定时器
+  const clearAllTimers = useCallback(() => {
+    timersRef.current.forEach(timer => clearTimeout(timer));
+    timersRef.current = [];
+  }, []);
+  
+  // 安全的setTimeout，会自动追踪并在组件卸载时清理
+  const safeSetTimeout = useCallback((callback: () => void, delay: number) => {
+    const timer = setTimeout(() => {
+      if (isMountedRef.current) {
+        callback();
+      }
+    }, delay);
+    timersRef.current.push(timer);
+    return timer;
+  }, []);
+  
+  // 组件卸载时清理
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      clearAllTimers();
+    };
+  }, [clearAllTimers]);
 
-  // 获取可复习的单词（有收集记录且未掌握的，至少1张图片）
-  const getReviewableWords = (): WordRecord[] => {
+  // 获取可复习的单词（有收集记录且未掌握的，至少1张有效图片）
+  const getReviewableWords = useCallback((): WordRecord[] => {
     return Object.values(userData.wordRecords).filter(
-      record => record.images.length >= 1 && !record.mastered
+      record => {
+        // 过滤出有效图片
+        const validImages = record.images.filter(img => isValidImageUrl(img.url));
+        return validImages.length >= 1 && !record.mastered;
+      }
     );
-  };
+  }, [userData.wordRecords]);
 
   // 开始新的复习
-  const startNewReview = () => {
+  const startNewReview = useCallback(() => {
+    // 防止重复触发
+    if (isProcessingRef.current) {
+      console.log('正在处理中，跳过重复调用');
+      return;
+    }
+    
+    // 清理之前的定时器
+    clearAllTimers();
+    
     const reviewableRecords = getReviewableWords();
-    console.log('可复习的单词记录:', reviewableRecords);
+    console.log('可复习的单词记录:', reviewableRecords.length);
     if (reviewableRecords.length === 0) return;
 
     // 随机选择一个单词
@@ -44,9 +100,14 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
     console.log('选中的单词:', word?.word, '图片数量:', randomRecord.images.length);
     if (!word) return;
 
-    // 随机选择一张收集的图片
-    const randomImage = randomRecord.images[Math.floor(Math.random() * randomRecord.images.length)];
-    console.log('选中的图片:', randomImage?.url);
+    // 过滤出有效图片，然后随机选择一张
+    const validImages = randomRecord.images.filter(img => isValidImageUrl(img.url));
+    if (validImages.length === 0) {
+      console.log('没有有效图片，跳过此单词');
+      return;
+    }
+    const randomImage = validImages[Math.floor(Math.random() * validImages.length)];
+    console.log('选中的图片:', randomImage?.url?.substring(0, 50) + '...');
     setCurrentImage(randomImage?.url || null);
 
     // 判断是选择题还是默写
@@ -58,8 +119,8 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
         type: 'START_REVIEW', 
         payload: { word, options: [] } 
       });
-      // 手动设置为默写阶段
-      setTimeout(() => {
+      // 手动设置为默写阶段 - 使用安全的setTimeout
+      safeSetTimeout(() => {
         dispatch({ type: 'ANSWER_CHOICE', payload: word.word });
       }, 0);
     } else {
@@ -77,15 +138,19 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
     setHintLevel(0);
     setAttemptCount(0);
     setShowWrongHint(false);
-  };
+  }, [getReviewableWords, dispatch, clearAllTimers, safeSetTimeout]);
 
-  // 初始化
+  // 初始化 - 只在组件首次挂载时执行一次
+  const hasInitializedRef = useRef(false);
   useEffect(() => {
+    if (hasInitializedRef.current) return;
+    
     const reviewableRecords = getReviewableWords();
     if (!reviewWord && reviewableRecords.length > 0) {
+      hasInitializedRef.current = true;
       startNewReview();
     }
-  }, []);
+  }, [reviewWord, getReviewableWords, startNewReview]);
 
   // 撒花/撒钻石特效
   const triggerConfetti = () => {
@@ -127,11 +192,13 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
     if (correct) {
       playSuccess();
       triggerConfetti();
+      isProcessingRef.current = true;
       // 正确后停留1.5秒，然后自动进入下一题
-      setTimeout(() => {
+      safeSetTimeout(() => {
         dispatch({ type: 'ANSWER_CHOICE', payload: answer });
         // 再等0.5秒后自动开始下一题
-        setTimeout(() => {
+        safeSetTimeout(() => {
+          isProcessingRef.current = false;
           startNewReview();
         }, 500);
       }, 1500);
@@ -155,11 +222,13 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
       setIsCorrect(true);
       setShowWrongHint(false);
       triggerConfetti();
+      isProcessingRef.current = true;
       // 正确后停留1.5秒，然后自动进入下一题
-      setTimeout(() => {
+      safeSetTimeout(() => {
         dispatch({ type: 'ANSWER_SPELLING', payload: spellingInput });
         // 再等0.5秒后自动开始下一题
-        setTimeout(() => {
+        safeSetTimeout(() => {
+          isProcessingRef.current = false;
           startNewReview();
         }, 500);
       }, 1500);
@@ -175,7 +244,7 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
       setSpellingInput('');
       setShowWrongHint(true);
       // 2秒后隐藏错误提示
-      setTimeout(() => setShowWrongHint(false), 2000);
+      safeSetTimeout(() => setShowWrongHint(false), 2000);
     }
   };
 
@@ -201,7 +270,10 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
             <motion.button
               whileHover={{ scale: 1.05, rotate: 3 }}
               whileTap={{ scale: 0.95, y: 10 }}
-              onClick={onBack}
+              onClick={() => {
+                playClick();
+                onBack();
+              }}
               className="btn-3d-lg w-32 h-32 rounded-full bg-[#FF5252] border-[#B71C1C] text-white font-black flex items-center justify-center"
             >
               <span className="text-base font-black tracking-wide text-center drop-shadow-md">START<br/>HUNTING</span>
@@ -218,7 +290,10 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
       <header className="flex items-center justify-between px-4 py-3 wood-bg border-b-4 border-[#5D4037]">
         <motion.button
           whileTap={{ scale: 0.95, y: 2 }}
-          onClick={onBack}
+          onClick={() => {
+            playClick();
+            onBack();
+          }}
           className="btn-3d p-2 rounded-xl bg-[#FFB74D] border-[#F57C00]"
         >
           <ArrowLeft className="w-5 h-5 text-white drop-shadow-md" strokeWidth={2.5} />
@@ -323,7 +398,10 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
                       {/* 提示按钮 */}
                       <motion.button
                         whileTap={{ scale: 0.95, y: 2 }}
-                        onClick={() => setHintLevel(prev => Math.min(prev + 1, 2))}
+                        onClick={() => {
+                          playClick();
+                          setHintLevel(prev => Math.min(prev + 1, 2));
+                        }}
                         disabled={hintLevel >= 2}
                         className={`btn-3d p-2 rounded-xl ${
                           hintLevel > 0 
