@@ -45,6 +45,12 @@ const CLEAR_DATA_FLAG: number = 0;        //CLEAR_DATA_FLAG = 1 → 清除所有
 // 抠图开关：0=不抠图使用原图，1=调用AI抠图
 export const REMOVE_BG_FLAG: number = 1;  //REMOVE_BG_FLAG = 0 → 使用原图 REMOVE_BG_FLAG = 1 → 进行AI抠图
 
+// 每个单词最多保存的图片数量
+const MAX_IMAGES_PER_WORD = 6;
+
+// 游客模式下最多收集的图片总数（超过后强制登录）
+export const MAX_GUEST_IMAGES = 5;
+
 
 // 从本地存储加载用户数据（未登录时使用）
 function loadLocalUserData(): UserData {
@@ -152,17 +158,24 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       newUserData.diamonds += 1;
       newUserData.totalCollected += 1;
       
-      // 更新单词记录 - 使用深拷贝避免引用问题
+      // 更新单词记录 - 使用深拷贝避免引用问题，并限制最多6张图片
       if (wordId) {
         const existingRecord = newUserData.wordRecords[wordId];
+        let updatedImages = existingRecord ? [...existingRecord.images, newImage] : [newImage];
+        
+        // 如果超过6张，删除最旧的
+        if (updatedImages.length > MAX_IMAGES_PER_WORD) {
+          updatedImages = updatedImages.slice(-MAX_IMAGES_PER_WORD);
+        }
+        
         const updatedRecord = existingRecord 
           ? {
               ...existingRecord,
-              images: [...existingRecord.images, newImage],
+              images: updatedImages,
             }
           : {
               wordId,
-              images: [newImage],
+              images: updatedImages,
               choiceCorrect: 0,
               spellingCorrect: 0,
               mastered: false,
@@ -176,11 +189,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       // 保存到本地存储
       saveLocalUserData(newUserData);
       
+      // 同样限制 collectedImages 最多6张
+      const limitedNewImages = newImages.length > MAX_IMAGES_PER_WORD 
+        ? newImages.slice(-MAX_IMAGES_PER_WORD) 
+        : newImages;
+      
       return {
         ...state,
         phase: 'SUCCESS',
         isLoading: false,
-        collectedImages: newImages,
+        collectedImages: limitedNewImages,
         lastResult: action.payload.result,
         capturedImageUrl: null,
         userData: newUserData,
@@ -215,17 +233,24 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       newUserData.diamonds += 1;
       newUserData.totalCollected += 1;
       
-      // 更新单词记录 - 使用深拷贝避免引用问题
+      // 更新单词记录 - 使用深拷贝避免引用问题，并限制最多6张图片
       if (wordId) {
         const existingRecord = newUserData.wordRecords[wordId];
+        let updatedImages = existingRecord ? [...existingRecord.images, newImage] : [newImage];
+        
+        // 如果超过6张，删除最旧的
+        if (updatedImages.length > MAX_IMAGES_PER_WORD) {
+          updatedImages = updatedImages.slice(-MAX_IMAGES_PER_WORD);
+        }
+        
         const updatedRecord = existingRecord 
           ? {
               ...existingRecord,
-              images: [...existingRecord.images, newImage],
+              images: updatedImages,
             }
           : {
               wordId,
-              images: [newImage],
+              images: updatedImages,
               choiceCorrect: 0,
               spellingCorrect: 0,
               mastered: false,
@@ -238,11 +263,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       
       saveLocalUserData(newUserData);
       
+      // 同样限制 collectedImages 最多6张
+      const limitedNewImages = newImages.length > MAX_IMAGES_PER_WORD 
+        ? newImages.slice(-MAX_IMAGES_PER_WORD) 
+        : newImages;
+      
       return {
         ...state,
         phase: 'SUCCESS',
         isLoading: false,
-        collectedImages: newImages,
+        collectedImages: limitedNewImages,
         lastResult: null,
         capturedImageUrl: null,
         userData: newUserData,

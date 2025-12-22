@@ -2,57 +2,50 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Lock, User, Loader2 } from 'lucide-react';
+import { X, User, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  forceRegister?: boolean; // 强制显示注册模式（游客收集满5张后）
+  message?: string; // 自定义提示信息
 }
 
-export function AuthModal({ isOpen, onClose }: AuthModalProps) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+export function AuthModal({ isOpen, onClose, forceRegister = false, message }: AuthModalProps) {
+  const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess] = useState('');
 
-  const { signIn, signUp } = useAuth();
+  const { signUpWithNickname } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
     setIsLoading(true);
 
     try {
-      if (mode === 'register') {
-        if (password !== confirmPassword) {
-          setError('两次输入的密码不一致');
-          setIsLoading(false);
-          return;
-        }
-        if (password.length < 6) {
-          setError('密码至少需要6个字符');
-          setIsLoading(false);
-          return;
-        }
-        const { error } = await signUp(email, password);
-        if (error) {
-          setError(error.message);
-        } else {
-          setSuccess('注册成功！请查收验证邮件后登录');
-          setMode('login');
-        }
+      if (!nickname.trim()) {
+        setError('请输入昵称');
+        setIsLoading(false);
+        return;
+      }
+      if (nickname.trim().length < 2) {
+        setError('昵称至少需要2个字符');
+        setIsLoading(false);
+        return;
+      }
+      if (nickname.trim().length > 20) {
+        setError('昵称最多20个字符');
+        setIsLoading(false);
+        return;
+      }
+      
+      const { error } = await signUpWithNickname(nickname.trim());
+      if (error) {
+        setError(error.message || '注册失败，请重试');
       } else {
-        const { error } = await signIn(email, password);
-        if (error) {
-          setError('邮箱或密码错误');
-        } else {
-          onClose();
-        }
+        onClose();
       }
     } catch (err) {
       setError('操作失败，请重试');
@@ -61,10 +54,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
   };
 
-  const switchMode = () => {
-    setMode(mode === 'login' ? 'register' : 'login');
-    setError('');
-    setSuccess('');
+  // 如果是强制注册模式，不允许关闭
+  const handleClose = () => {
+    if (!forceRegister) {
+      onClose();
+    }
   };
 
   return (
@@ -75,7 +69,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={onClose}
+          onClick={handleClose}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -85,87 +79,52 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             onClick={(e) => e.stopPropagation()}
           >
             {/* 标题 */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-black text-[#5D4037]">
-                {mode === 'login' ? '🎮 登录' : '🎉 注册'}
+                🎉 创建账号
               </h2>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-              >
-                <X className="w-6 h-6 text-gray-500" />
-              </button>
+              {!forceRegister && (
+                <button
+                  onClick={onClose}
+                  className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-500" />
+                </button>
+              )}
             </div>
+
+            {/* 自定义提示信息 */}
+            {message && (
+              <div className="mb-4 p-3 bg-[#FFF8E1] border-2 border-[#F57C00] rounded-xl">
+                <p className="text-sm text-[#5D4037] font-medium">{message}</p>
+              </div>
+            )}
 
             {/* 表单 */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* 邮箱 */}
+              {/* 昵称 */}
               <div>
                 <label className="block text-sm font-bold text-[#5D4037] mb-1">
-                  邮箱
+                  给自己取个昵称吧
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="请输入邮箱"
+                    type="text"
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value)}
+                    placeholder="请输入昵称（2-20个字符）"
                     required
+                    autoFocus
                     className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#4FC3F7] focus:outline-none transition-colors"
                   />
                 </div>
               </div>
-
-              {/* 密码 */}
-              <div>
-                <label className="block text-sm font-bold text-[#5D4037] mb-1">
-                  密码
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="请输入密码"
-                    required
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#4FC3F7] focus:outline-none transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* 确认密码（仅注册） */}
-              {mode === 'register' && (
-                <div>
-                  <label className="block text-sm font-bold text-[#5D4037] mb-1">
-                    确认密码
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="请再次输入密码"
-                      required
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#4FC3F7] focus:outline-none transition-colors"
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* 错误提示 */}
               {error && (
                 <div className="p-3 bg-red-50 border-2 border-red-200 rounded-xl">
                   <p className="text-sm text-red-600 font-medium">{error}</p>
-                </div>
-              )}
-
-              {/* 成功提示 */}
-              {success && (
-                <div className="p-3 bg-green-50 border-2 border-green-200 rounded-xl">
-                  <p className="text-sm text-green-600 font-medium">{success}</p>
                 </div>
               )}
 
@@ -178,25 +137,18 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    处理中...
+                    创建中...
                   </>
-                ) : mode === 'login' ? (
-                  '登录'
                 ) : (
-                  '注册'
+                  '开始冒险 🚀'
                 )}
               </button>
             </form>
 
-            {/* 切换模式 */}
-            <div className="mt-4 text-center">
-              <button
-                onClick={switchMode}
-                className="text-sm text-[#4FC3F7] hover:text-[#0288D1] font-medium"
-              >
-                {mode === 'login' ? '没有账号？点击注册' : '已有账号？点击登录'}
-              </button>
-            </div>
+            {/* 说明文字 */}
+            <p className="mt-4 text-center text-xs text-gray-400">
+              创建账号后，你的收集进度将自动保存到云端
+            </p>
           </motion.div>
         </motion.div>
       )}

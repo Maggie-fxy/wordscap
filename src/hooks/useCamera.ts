@@ -6,6 +6,7 @@ interface UseCameraReturn {
   videoRef: React.RefObject<HTMLVideoElement>;
   canvasRef: React.RefObject<HTMLCanvasElement>;
   isStreaming: boolean;
+  isFrontCamera: boolean; // 是否是前置摄像头
   error: string | null;
   startCamera: () => Promise<void>;
   stopCamera: () => void;
@@ -18,6 +19,7 @@ export function useCamera(): UseCameraReturn {
   const streamRef = useRef<MediaStream | null>(null);
   const isStartingRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isFrontCamera, setIsFrontCamera] = useState(false); // 默认后置摄像头
   const [error, setError] = useState<string | null>(null);
 
   const startCamera = useCallback(async () => {
@@ -88,6 +90,7 @@ export function useCamera(): UseCameraReturn {
         
         await videoRef.current.play();
         setIsStreaming(true);
+        setIsFrontCamera(false); // 后置摄像头成功启动
       }
     } catch (err) {
       console.error('Camera error:', err);
@@ -113,6 +116,7 @@ export function useCamera(): UseCameraReturn {
               videoRef.current.srcObject = fallbackStream;
               await videoRef.current.play();
               setIsStreaming(true);
+              setIsFrontCamera(true); // 回退到前置摄像头
             }
             isStartingRef.current = false;
             return;
@@ -176,6 +180,7 @@ export function useCamera(): UseCameraReturn {
     videoRef,
     canvasRef,
     isStreaming,
+    isFrontCamera,
     error,
     startCamera,
     stopCamera,

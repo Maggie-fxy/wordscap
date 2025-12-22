@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Lightbulb, Volume2, VolumeX, Music, Mic } from 'lucide-react';
-import { useGame, REMOVE_BG_FLAG } from '@/context/GameContext';
+import { useGame, REMOVE_BG_FLAG, MAX_GUEST_IMAGES } from '@/context/GameContext';
 import { SplashScreen } from '@/components/SplashScreen';
 import { CollectionGrid } from '@/components/CollectionGrid';
 import { CameraView } from '@/components/CameraView';
@@ -13,6 +13,7 @@ import { ProfilePage } from '@/components/ProfilePage';
 import { WordBook } from '@/components/WordBook';
 import { BottomNav } from '@/components/BottomNav';
 import { AchievementToast } from '@/components/AchievementToast';
+import { AuthModal } from '@/components/AuthModal';
 import { useSound } from '@/hooks/useSound';
 import { useBgm } from '@/hooks/useBgm';
 import { useTTS } from '@/hooks/useTTS';
@@ -36,7 +37,7 @@ export default function HomePage() {
   const { state, dispatch, startNewGame, nextWord, handleCollectionSuccessAction, isLoggedIn } = useGame();
   const { currentWord, collectedImages, phase, userData, showHint, mode } = state;
   const [showVictory, setShowVictory] = useState(false);
-  const { playClick, playSuccess } = useSound();
+  const { playClick, playSuccess, playShutter, playSwitch, playHint, playNav } = useSound();
   const { toggleBgm, isPlaying: isBgmPlaying } = useBgm();
   const { speakEnglish } = useTTS();
   
@@ -50,6 +51,8 @@ export default function HomePage() {
   const [unlockedAchievement, setUnlockedAchievement] = useState<typeof ACHIEVEMENTS[0] | null>(null); // 新解锁的成就
   const [analyzingText, setAnalyzingText] = useState<string>('🔍 豆包AI识别中...');
   const [showSplash, setShowSplash] = useState(true); // 开屏动画状态
+  const [showAuthModal, setShowAuthModal] = useState(false); // 显示登录/注册弹窗
+  const [forceAuth, setForceAuth] = useState(false); // 是否强制登录（游客收集满5张）
   const prevUserDataRef = useRef(userData); // 用于检测成就变化
   
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -67,10 +70,20 @@ export default function HomePage() {
   // 检测成就解锁 - 只在收集新图片时触发，不在初始加载时触发
   const prevTotalCollectedRef = useRef<number>(-1); // -1 表示未初始化
   const mountedTimeRef = useRef<number>(0);
+  const shownAchievementsRef = useRef<Set<string>>(new Set()); // 已显示过的成就
   
-  // 组件挂载后等待2秒才开始检测成就，避免初始加载触发
+  // 组件挂载时加载已显示过的成就列表
   useEffect(() => {
     mountedTimeRef.current = Date.now();
+    // 从 localStorage 加载已显示过的成就
+    try {
+      const shown = localStorage.getItem('wordcaps_shown_achievements');
+      if (shown) {
+        shownAchievementsRef.current = new Set(JSON.parse(shown));
+      }
+    } catch (e) {
+      console.log('Failed to load shown achievements');
+    }
   }, []);
   
   useEffect(() => {
@@ -97,8 +110,15 @@ export default function HomePage() {
     // 检查收集类成就
     for (const achievement of ACHIEVEMENTS) {
       if (achievement.type !== 'collect') continue;
+      // 跳过已经显示过的成就
+      if (shownAchievementsRef.current.has(achievement.id)) continue;
       
-      if (prevTotal < achievement.threshold && userData.totalCollected >= achievement.threshold) {
+      if (userData.totalCollected >= achievement.threshold) {
+        // 标记为已显示并保存到 localStorage
+        shownAchievementsRef.current.add(achievement.id);
+        try {
+          localStorage.setItem('wordcaps_shown_achievements', JSON.stringify(Array.from(shownAchievementsRef.current)));
+        } catch (e) {}
         setUnlockedAchievement(achievement);
         return;
       }
@@ -107,8 +127,15 @@ export default function HomePage() {
     // 检查钻石成就
     for (const achievement of ACHIEVEMENTS) {
       if (achievement.type !== 'diamond') continue;
+      // 跳过已经显示过的成就
+      if (shownAchievementsRef.current.has(achievement.id)) continue;
       
-      if (prevTotal < achievement.threshold && userData.diamonds >= achievement.threshold) {
+      if (userData.diamonds >= achievement.threshold) {
+        // 标记为已显示并保存到 localStorage
+        shownAchievementsRef.current.add(achievement.id);
+        try {
+          localStorage.setItem('wordcaps_shown_achievements', JSON.stringify(Array.from(shownAchievementsRef.current)));
+        } catch (e) {}
         setUnlockedAchievement(achievement);
         return;
       }
@@ -122,7 +149,7 @@ export default function HomePage() {
 
   // 换词处理（带动画）- 必须在条件返回之前定义
   const handleSwitchWord = useCallback(() => {
-    playClick();
+    playSwitch();
     setIsCardSwitching(true);
     setTimeout(() => {
       nextWord();
@@ -134,7 +161,7 @@ export default function HomePage() {
         setIsCardSwitching(false);
       }, 300);
     }, 300);
-  }, [nextWord]);
+  }, [nextWord, playSwitch]);
 
   // 识别成功后自动跳转下一个单词 - 停留4秒让用户看到图片在框里
   useEffect(() => {
@@ -191,26 +218,34 @@ export default function HomePage() {
     };
   }, [mode, phase, currentWord, handleSwitchWord, showSplash]);
 
-  // 单词改变时重置倒计时和提示（开屏动画期间不启动）
+  // 记录上一个单词ID，用于判断是否真正换词了
+  const prevWordIdRef = useRef<string | null>(null);
+  
+  // 单词改变时重置倒计时和提示：
+  // - 开屏动画期间不启动
+  // - 只有单词ID真正改变时才重置（切换栏目不重置）
   useEffect(() => {
     if (currentWord && mode === 'HUNTER' && !showSplash) {
-      setCountdown(60);
-      setHintLevel(0);
-      setHintButtonFlashing(false);
-      
-      // 清除旧的提示计时器
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      if (idleTimer2Ref.current) clearTimeout(idleTimer2Ref.current);
-      
-      // 10秒后开始闪烁提示按钮
-      idleTimerRef.current = setTimeout(() => {
-        setHintButtonFlashing(1);
-      }, 10000);
-      
-      // 20秒后引导第二次提示
-      idleTimer2Ref.current = setTimeout(() => {
-        setHintButtonFlashing(2);
-      }, 20000);
+      if (prevWordIdRef.current !== currentWord.id) {
+        prevWordIdRef.current = currentWord.id;
+        setCountdown(60);
+        setHintLevel(0);
+        setHintButtonFlashing(false);
+        
+        // 清除旧的提示计时器
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        if (idleTimer2Ref.current) clearTimeout(idleTimer2Ref.current);
+        
+        // 10秒后开始闪烁提示按钮
+        idleTimerRef.current = setTimeout(() => {
+          setHintButtonFlashing(1);
+        }, 10000);
+        
+        // 20秒后引导第二次提示
+        idleTimer2Ref.current = setTimeout(() => {
+          setHintButtonFlashing(2);
+        }, 20000);
+      }
     }
     
     return () => {
@@ -439,7 +474,7 @@ export default function HomePage() {
 
   // 使用提示（新逻辑：第一次英文，第二次中文）
   const handleUseHint = () => {
-    playClick();
+    playHint();
     if (hintLevel === 0) {
       // 第一次点击：显示英文提示
       setHintLevel(1);
@@ -474,6 +509,13 @@ export default function HomePage() {
 
   // 开始相机
   const handleStartCamera = () => {
+    // 检查游客是否已收集满5张，需要强制登录
+    if (!isLoggedIn && userData.totalCollected >= MAX_GUEST_IMAGES) {
+      playClick();
+      setForceAuth(true);
+      setShowAuthModal(true);
+      return;
+    }
     playClick();
     dispatch({ type: 'START_CAMERA' });
   };
@@ -769,6 +811,17 @@ export default function HomePage() {
       <AchievementToast 
         achievement={unlockedAchievement} 
         onClose={() => setUnlockedAchievement(null)} 
+      />
+
+      {/* 登录/注册弹窗 */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => {
+          setShowAuthModal(false);
+          setForceAuth(false);
+        }}
+        forceRegister={forceAuth}
+        message={forceAuth ? `你已经收集了 ${MAX_GUEST_IMAGES} 张图片！创建账号后可以继续收集，并且数据会自动保存到云端哦~` : undefined}
       />
     </div>
   );

@@ -92,7 +92,7 @@ body {
   object-fit: contain;
   width: 100%;
   height: 100%;
-  transform: scaleX(-1);
+  /* 镜像效果现在由组件动态控制，只有前置摄像头才镜像 */
   background-color: #000;
 }
 

@@ -13,6 +13,7 @@ interface AuthContextType {
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithNickname: (nickname: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshUserData: () => Promise<void>;
 }
@@ -120,6 +121,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  // 使用昵称注册（生成随机邮箱+密码，保存昵称到 profiles）
+  const signUpWithNickname = async (nickname: string) => {
+    try {
+      // 生成随机邮箱和密码
+      const randomId = Math.random().toString(36).substring(2, 15);
+      const randomEmail = `user_${randomId}@wordshunter.online`;
+      const randomPassword = Math.random().toString(36).substring(2, 15) + 'Aa1!';
+      
+      // 创建账号
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: randomEmail,
+        password: randomPassword,
+        options: {
+          data: {
+            username: nickname,
+          },
+        },
+      });
+      
+      if (signUpError) {
+        return { error: signUpError };
+      }
+      
+      // 如果注册成功，更新 profiles 表的 username
+      if (data.user) {
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
+            username: nickname,
+          });
+        
+        // 创建 user_stats 记录
+        await supabase
+          .from('user_stats')
+          .upsert({
+            user_id: data.user.id,
+            diamonds: 0,
+            total_collected: 0,
+            total_mastered: 0,
+          });
+      }
+      
+      return { error: null };
+    } catch (err) {
+      return { error: err as Error };
+    }
+  };
+
   // 登出
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -139,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         signIn,
         signUp,
+        signUpWithNickname,
         signOut,
         refreshUserData,
       }}

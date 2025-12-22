@@ -11,7 +11,7 @@ interface BottomNavProps {
 }
 
 export function BottomNav({ currentMode, onModeChange }: BottomNavProps) {
-  const { playClick } = useSound();
+  const { playNav } = useSound();
   
   const navItems = [
     { mode: 'HUNTER' as GameMode, icon: Target, label: '狩猎' },
@@ -33,7 +33,7 @@ export function BottomNav({ currentMode, onModeChange }: BottomNavProps) {
               whileTap={{ scale: 0.95, y: 2 }}
               whileHover={{ scale: 1.05 }}
               onClick={() => {
-                playClick();
+                playNav();
                 onModeChange(item.mode);
               }}
               className={`relative flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all ${

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Camera, RotateCcw, Check, Loader2 } from 'lucide-react';
 import { useCamera } from '@/hooks/useCamera';
 import { useGame } from '@/context/GameContext';
+import { useSound } from '@/hooks/useSound';
 import { GamePhase } from '@/types';
 
 interface CameraViewProps {
@@ -15,8 +16,9 @@ interface CameraViewProps {
 }
 
 export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }: CameraViewProps) {
-  const { videoRef, canvasRef, isStreaming, error, startCamera, stopCamera, captureImage } = useCamera();
+  const { videoRef, canvasRef, isStreaming, isFrontCamera, error, startCamera, stopCamera, captureImage } = useCamera();
   const { state, dispatch } = useGame();
+  const { playShutter, playClick } = useSound();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,6 +39,7 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }
   }, []);
 
   const handleCapture = () => {
+    playShutter(); // 快门音效
     const imageData = captureImage();
     if (imageData) {
       onCapture(imageData);
@@ -57,13 +60,14 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }
       {/* 隐藏的 canvas 用于截图 */}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* 相机预览 */}
+      {/* 相机预览 - 只有前置摄像头才镜像 */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
         className={`camera-feed ${isAnalyzing ? 'blur-sm' : ''}`}
+        style={{ transform: isFrontCamera ? 'scaleX(-1)' : 'none' }}
       />
 
       {/* 扫描动画覆盖层 */}

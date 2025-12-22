@@ -193,7 +193,30 @@ export async function deleteCollectedImage(imageId: string): Promise<boolean> {
   return true;
 }
 
+// 删除某个单词最旧的图片（当超过限制时调用）
+export async function deleteOldestImageForWord(userId: string, wordId: string): Promise<boolean> {
+  // 获取该单词的所有图片，按时间升序（最旧的在前）
+  const { data: images, error: fetchError } = await supabase
+    .from('collected_images')
+    .select('id, captured_at')
+    .eq('user_id', userId)
+    .eq('word_id', wordId)
+    .order('captured_at', { ascending: true });
+  
+  if (fetchError || !images || images.length === 0) {
+    console.error('获取图片列表失败:', fetchError);
+    return false;
+  }
+  
+  // 删除最旧的那张
+  const oldestImage = images[0];
+  return deleteCollectedImage(oldestImage.id);
+}
+
 // ============ 综合操作 ============
+
+// 每个单词最多保存的图片数量
+const MAX_IMAGES_PER_WORD = 6;
 
 // 收集成功后的完整操作：创建/更新单词记录 + 添加图片 + 更新统计
 export async function handleCollectionSuccess(
@@ -213,7 +236,15 @@ export async function handleCollectionSuccess(
       return { success: false };
     }
     
-    // 2. 添加收集的图片
+    // 2. 检查该单词已有多少张图片，如果已满则删除最旧的
+    const existingImages = await getCollectedImages(userId, wordId);
+    if (existingImages.length >= MAX_IMAGES_PER_WORD) {
+      // 删除最旧的图片（existingImages 已按 captured_at 降序排列，最后一个是最旧的）
+      const oldestImage = existingImages[existingImages.length - 1];
+      await deleteCollectedImage(oldestImage.id);
+    }
+    
+    // 3. 添加收集的图片
     const image = await addCollectedImage(
       userId,
       wordRecord.id,
@@ -226,7 +257,7 @@ export async function handleCollectionSuccess(
       return { success: false };
     }
     
-    // 3. 更新用户统计（钻石+1，总收集+1）
+    // 4. 更新用户统计（钻石+1，总收集+1）
     const { data: stats } = await supabase
       .from('user_stats')
       .select('diamonds, total_collected')
