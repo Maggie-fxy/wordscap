@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useReducer, ReactNode, useEffect, useCallback } from 'react';
 import { GameState, GameAction, CollectedImage, UserData, WordRecord } from '@/types';
-import { getRandomWord } from '@/data/wordBank';
+import { DEMO_WORD_LIST, getRandomWord, getRandomWordFromWordList } from '@/data/wordBank';
 import { useAuth } from './AuthContext';
 import { 
   getUserLearningData, 
@@ -51,6 +51,10 @@ const MAX_IMAGES_PER_WORD = 6;
 // 游客模式下最多收集的图片总数（超过后强制登录）
 export const MAX_GUEST_IMAGES = 5;
 
+// Demo 抽词计数：前30次必出 Demo 词池
+const DEMO_PICK_COUNT_KEY = 'wordcaps_demo_pick_count';
+const DEMO_PICK_LIMIT = 30;
+
 
 // 从本地存储加载用户数据（未登录时使用）
 function loadLocalUserData(): UserData {
@@ -83,6 +87,36 @@ function saveLocalUserData(userData: UserData) {
   } catch (e) {
     console.error('保存本地用户数据失败:', e);
   }
+}
+
+function loadDemoPickCount(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = localStorage.getItem(DEMO_PICK_COUNT_KEY);
+    const n = raw ? Number.parseInt(raw, 10) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveDemoPickCount(count: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(DEMO_PICK_COUNT_KEY, String(count));
+  } catch {
+    // ignore
+  }
+}
+
+function pickWordWithDemoPriority(excludeIds: string[] = []) {
+  const count = loadDemoPickCount();
+  if (count < DEMO_PICK_LIMIT) {
+    const word = getRandomWordFromWordList(DEMO_WORD_LIST, excludeIds);
+    saveDemoPickCount(count + 1);
+    return word;
+  }
+  return getRandomWord(excludeIds);
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -501,13 +535,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const startNewGame = () => {
-    const word = getRandomWord();
+    const word = pickWordWithDemoPriority();
     dispatch({ type: 'SET_WORD', payload: word });
   };
 
   const nextWord = () => {
     const excludeIds = state.currentWord ? [state.currentWord.id] : [];
-    const word = getRandomWord(excludeIds);
+    const word = pickWordWithDemoPriority(excludeIds);
     dispatch({ type: 'NEXT_WORD', payload: word });
   };
 

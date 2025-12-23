@@ -17,6 +17,8 @@ export const WORD_BANK: Word[] = [
   { id: 'w8', word: "CAKE", cn: "蛋糕", hint: "生日时吃的甜点", hintEn: "Sweet dessert for birthdays", category: "food", difficulty: 1 },
   { id: 'w9', word: "CANDY", cn: "糖果", hint: "甜甜的小零食", hintEn: "Small sweet treats for kids", category: "food", difficulty: 1 },
   { id: 'w10', word: "WATER", cn: "水", hint: "透明的液体，生命之源", hintEn: "Clear liquid, essential for life", category: "food", difficulty: 1 },
+  { id: 'w204', word: "COFFEE", cn: "咖啡", hint: "提神的饮料，办公室常见", category: "food", difficulty: 1 },
+  { id: 'w205', word: "TEA", cn: "茶", hint: "热饮，很多人爱喝", category: "food", difficulty: 1 },
   
   // 日用品
   { id: 'w11', word: "CUP", cn: "杯子", hint: "喝水用的容器", hintEn: "A container for drinking", category: "daily", difficulty: 1 },
@@ -241,7 +243,60 @@ export const WORD_BANK: Word[] = [
   { id: 'w198', word: "SLIDE", cn: "滑梯", hint: "滑下来的", category: "toy", difficulty: 3 },
   { id: 'w199', word: "SANDBOX", cn: "沙坑", hint: "玩沙子的地方", category: "toy", difficulty: 3 },
   { id: 'w200', word: "SEESAW", cn: "跷跷板", hint: "两人一起玩的板", category: "toy", difficulty: 3 },
+  { id: 'w201', word: "HAND", cn: "手", hint: "身体的一部分，用来拿东西", category: "daily", difficulty: 1 },
+  { id: 'w202', word: "POWER BANK", cn: "充电宝", hint: "给手机应急充电的", category: "tech", difficulty: 2 },
+  { id: 'w203', word: "DOWN JACKET", cn: "羽绒服", hint: "很保暖的冬季外套", category: "clothing", difficulty: 2 },
+  { id: 'w206', word: "LAPTOP", cn: "笔记本电脑", hint: "便携式电脑，办公常见", category: "tech", difficulty: 2 },
+  { id: 'w207', word: "LIGHT", cn: "灯", hint: "照明用的（也可以说 lamp）", category: "furniture", difficulty: 1 },
+  { id: 'w208', word: "SHOES", cn: "鞋子", hint: "穿在脚上的（复数）", category: "clothing", difficulty: 1 },
 ];
+
+// Demo 优先词池（前30次抽词：100%从该列表中抽）
+export const DEMO_WORD_LIST: string[] = [
+  'COMPUTER',
+  'PHONE',
+  'LAPTOP',
+  'KEYBOARD',
+  'MOUSE',
+  'SCREEN',
+  'DESK',
+  'CHAIR',
+  'PEN',
+  'PENCIL',
+  'PAPER',
+  'NOTEBOOK',
+  'BOOK',
+  'BOTTLE',
+  'BAG',
+  'DOOR',
+  'WINDOW',
+  'KEY',
+  'WALLET',
+  'CLOCK',
+  'LIGHT',
+  'WATER',
+  'COFFEE',
+  'TEA',
+  'CUP',
+  'SHOES',
+  'HAND',
+  'PROJECTOR',
+  'DOWN JACKET',
+  'POWER BANK',
+];
+
+export function getRandomWordFromWordList(wordList: string[], excludeIds: string[] = []): Word {
+  const wordSet = new Set(wordList.map(w => w.toUpperCase()));
+  const poolAll = WORD_BANK.filter(w => wordSet.has(w.word.toUpperCase()));
+  if (poolAll.length === 0) {
+    return getRandomWord(excludeIds);
+  }
+  let pool = poolAll.filter(w => !excludeIds.includes(w.id));
+  if (pool.length === 0) {
+    pool = poolAll;
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 // 随机获取一个单词
 export function getRandomWord(excludeIds: string[] = []): Word {

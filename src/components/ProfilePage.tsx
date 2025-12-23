@@ -98,10 +98,36 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
       });
 
   // 重置游戏
-  const handleReset = () => {
+  const handleReset = async () => {
     playClick();
     if (confirm('确定要重置所有游戏进度吗？此操作不可撤销！')) {
+      // 清除本地所有与游戏相关的存储
       localStorage.removeItem('wordcaps_user_data');
+      localStorage.removeItem('wordcaps_shown_achievements');
+      localStorage.removeItem('wordcaps_demo_pick_count');
+
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          const key = k.toLowerCase();
+          if ((key.startsWith('sb-') && key.includes('auth')) || key.includes('supabase')) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // 如果当前是登录状态，为了回到“第一次进入”的体验，先退出登录
+      if (user) {
+        try {
+          await signOut();
+        } catch (e) {
+          // ignore
+        }
+      }
+
       window.location.reload();
     }
   };
