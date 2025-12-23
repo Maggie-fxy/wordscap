@@ -249,6 +249,11 @@ export const WORD_BANK: Word[] = [
   { id: 'w206', word: "LAPTOP", cn: "笔记本电脑", hint: "便携式电脑，办公常见", category: "tech", difficulty: 2 },
   { id: 'w207', word: "LIGHT", cn: "灯", hint: "照明用的（也可以说 lamp）", category: "furniture", difficulty: 1 },
   { id: 'w208', word: "SHOES", cn: "鞋子", hint: "穿在脚上的（复数）", category: "clothing", difficulty: 1 },
+  { id: 'w209', word: "MINERAL WATER", cn: "矿泉水", hint: "瓶装的饮用水", category: "food", difficulty: 1 },
+  { id: 'w210', word: "HAND CREAM", cn: "护手霜", hint: "涂在手上的保湿霜", category: "daily", difficulty: 2 },
+  { id: 'w211', word: "ID CARD", cn: "身份证", hint: "证明身份的卡片", category: "daily", difficulty: 2 },
+  { id: 'w212', word: "CHAOTIC", cn: "混乱的", hint: "乱糟糟的，不有序", category: "daily", difficulty: 3 },
+  { id: 'w213', word: "COCONUT WATER", cn: "椰子水", hint: "椰子里的清甜饮料", category: "food", difficulty: 2 },
 ];
 
 // Demo 优先词池（前30次抽词：100%从该列表中抽）
@@ -259,7 +264,6 @@ export const DEMO_WORD_LIST: string[] = [
   'KEYBOARD',
   'MOUSE',
   'SCREEN',
-  'DESK',
   'CHAIR',
   'PEN',
   'PENCIL',
@@ -275,12 +279,13 @@ export const DEMO_WORD_LIST: string[] = [
   'CLOCK',
   'LIGHT',
   'WATER',
+  'MINERAL WATER',
   'COFFEE',
   'TEA',
   'CUP',
   'SHOES',
   'HAND',
-  'PROJECTOR',
+  'HAND CREAM',
   'DOWN JACKET',
   'POWER BANK',
 ];

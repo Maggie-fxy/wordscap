@@ -55,6 +55,16 @@ export const MAX_GUEST_IMAGES = 5;
 const DEMO_PICK_COUNT_KEY = 'wordcaps_demo_pick_count';
 const DEMO_PICK_LIMIT = 30;
 
+// 演示模式：置1开启（前5个单词顺序固定）
+const DEMO_MODE_FLAG: number = 1;
+const DEMO_FIXED_SEQUENCE: string[] = [
+  'CUP',
+  'ID CARD',
+  'CHAOTIC',
+  'HEADPHONE',
+  'COCONUT WATER',
+];
+
 
 // 从本地存储加载用户数据（未登录时使用）
 function loadLocalUserData(): UserData {
@@ -111,6 +121,14 @@ function saveDemoPickCount(count: number) {
 
 function pickWordWithDemoPriority(excludeIds: string[] = []) {
   const count = loadDemoPickCount();
+
+  if (DEMO_MODE_FLAG === 1 && count < DEMO_FIXED_SEQUENCE.length) {
+    const target = DEMO_FIXED_SEQUENCE[count];
+    const word = getRandomWordFromWordList([target], excludeIds);
+    saveDemoPickCount(count + 1);
+    return word;
+  }
+
   if (count < DEMO_PICK_LIMIT) {
     const word = getRandomWordFromWordList(DEMO_WORD_LIST, excludeIds);
     saveDemoPickCount(count + 1);
