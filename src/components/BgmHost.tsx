@@ -3,12 +3,28 @@
 import { ReactNode, useEffect, useRef } from 'react';
 import { BgmProvider, useBgm } from '@/hooks/useBgm';
 
+// 全局单例 audio 实例，确保切换栏目时不被重新创建
+let globalAudio: HTMLAudioElement | null = null;
+
+function getGlobalAudio(): HTMLAudioElement {
+  if (!globalAudio && typeof window !== 'undefined') {
+    globalAudio = document.createElement('audio');
+    globalAudio.src = '/bgm.mp3';
+    globalAudio.loop = true;
+    globalAudio.volume = 0.5;
+    globalAudio.preload = 'auto';
+    // @ts-ignore - playsInline 是有效属性
+    globalAudio.playsInline = true;
+  }
+  return globalAudio!;
+}
+
 function BgmPlayer() {
   const { isPlaying } = useBgm();
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const hasInitRef = useRef(false);
 
   useEffect(() => {
-    const audio = audioRef.current;
+    const audio = getGlobalAudio();
     if (!audio) return;
 
     if (isPlaying) {
@@ -22,19 +38,12 @@ function BgmPlayer() {
     } else {
       audio.pause();
     }
+    
+    hasInitRef.current = true;
   }, [isPlaying]);
 
-  // 使用 audio 标签而不是 new Audio()，兼容微信浏览器
-  return (
-    <audio
-      ref={audioRef}
-      src="/bgm.mp3"
-      loop
-      playsInline
-      preload="auto"
-      style={{ display: 'none' }}
-    />
-  );
+  // 不渲染任何 DOM，使用全局 audio 实例
+  return null;
 }
 
 export function BgmHost({ children }: { children: ReactNode }) {
