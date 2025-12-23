@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { GameProvider } from "@/context/GameContext";
+import { BgmHost } from "@/components/BgmHost";
 
 export const metadata: Metadata = {
   title: "WordCaps - 英语寻宝",
@@ -25,7 +26,9 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           <GameProvider>
-            {children}
+            <BgmHost>
+              {children}
+            </BgmHost>
           </GameProvider>
         </AuthProvider>
       </body>

@@ -38,7 +38,7 @@ export default function HomePage() {
   const { currentWord, collectedImages, phase, userData, showHint, mode } = state;
   const [showVictory, setShowVictory] = useState(false);
   const { playClick, playSuccess, playShutter, playSwitch, playHint, playNav } = useSound();
-  const { toggleBgm, isPlaying: isBgmPlaying } = useBgm();
+  const { toggleBgm, isPlaying: isBgmPlaying, playBgm } = useBgm();
   const { speakEnglish } = useTTS();
   
   // 新增状态
@@ -276,7 +276,9 @@ export default function HomePage() {
   // 开屏动画完成回调
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
-  }, []);
+    // 用户点击 Start Hunting 后开始播放背景音乐
+    playBgm();
+  }, [playBgm]);
 
   // 显示开屏动画
   if (showSplash) {
@@ -750,23 +752,6 @@ export default function HomePage() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {isBgmPlaying && (
-        <div
-          className="fixed z-[-1] opacity-0 pointer-events-none"
-          style={{ width: 1, height: 1, left: -9999, top: -9999 }}
-        >
-          <iframe
-            frameBorder="no"
-            marginWidth={0}
-            marginHeight={0}
-            width={1}
-            height={1}
-            allow="autoplay"
-            src="https://music.163.com/outchain/player?type=2&id=2075140388&auto=1&height=66"
-          />
-        </div>
-      )}
 
       {/* 底部倒计时进度条 - 相机模式下隐藏，避免与拍照按钮重叠 */}
       {!isCameraActive && (
