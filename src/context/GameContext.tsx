@@ -55,8 +55,11 @@ export const MAX_GUEST_IMAGES = 5;
 const DEMO_PICK_COUNT_KEY = 'wordcaps_demo_pick_count';
 const DEMO_PICK_LIMIT = 30;
 
-// 演示模式：置1开启（前5个单词顺序固定）
-const DEMO_MODE_FLAG: number = 1;
+// 演示模式开关（localStorage）
+const DEMO_MODE_KEY = 'wordcaps_demo_mode_enabled';
+const DEMO_SEQUENCE_INDEX_KEY = 'wordcaps_demo_sequence_index';
+
+// 演示模式：前5个单词顺序固定
 const DEMO_FIXED_SEQUENCE: string[] = [
   'CUP',
   'ID CARD',
@@ -110,6 +113,44 @@ function loadDemoPickCount(): number {
   }
 }
 
+function loadDemoModeEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(DEMO_MODE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveDemoModeEnabled(enabled: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(DEMO_MODE_KEY, enabled ? '1' : '0');
+  } catch {
+    // ignore
+  }
+}
+
+function loadDemoSequenceIndex(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = localStorage.getItem(DEMO_SEQUENCE_INDEX_KEY);
+    const n = raw ? Number.parseInt(raw, 10) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveDemoSequenceIndex(index: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(DEMO_SEQUENCE_INDEX_KEY, String(index));
+  } catch {
+    // ignore
+  }
+}
+
 function saveDemoPickCount(count: number) {
   if (typeof window === 'undefined') return;
   try {
@@ -120,18 +161,23 @@ function saveDemoPickCount(count: number) {
 }
 
 function pickWordWithDemoPriority(excludeIds: string[] = []) {
-  const count = loadDemoPickCount();
+  const pickCount = loadDemoPickCount();
+  const demoEnabled = loadDemoModeEnabled();
 
-  if (DEMO_MODE_FLAG === 1 && count < DEMO_FIXED_SEQUENCE.length) {
-    const target = DEMO_FIXED_SEQUENCE[count];
-    const word = getRandomWordFromWordList([target], excludeIds);
-    saveDemoPickCount(count + 1);
-    return word;
+  if (demoEnabled) {
+    const seqIndex = loadDemoSequenceIndex();
+    if (seqIndex < DEMO_FIXED_SEQUENCE.length) {
+      const target = DEMO_FIXED_SEQUENCE[seqIndex];
+      const word = getRandomWordFromWordList([target], excludeIds);
+      saveDemoSequenceIndex(seqIndex + 1);
+      saveDemoPickCount(pickCount + 1);
+      return word;
+    }
   }
 
-  if (count < DEMO_PICK_LIMIT) {
+  if (pickCount < DEMO_PICK_LIMIT) {
     const word = getRandomWordFromWordList(DEMO_WORD_LIST, excludeIds);
-    saveDemoPickCount(count + 1);
+    saveDemoPickCount(pickCount + 1);
     return word;
   }
   return getRandomWord(excludeIds);
@@ -481,6 +527,8 @@ interface GameContextType {
   dispatch: React.Dispatch<GameAction>;
   startNewGame: () => void;
   nextWord: () => void;
+  demoModeEnabled: boolean;
+  toggleDemoMode: () => void;
   syncToCloud: (userData: UserData) => Promise<void>;
   syncReviewProgress: (wordId: string, choiceCorrect: number, spellingCorrect: number, mastered: boolean) => Promise<void>;
   handleCollectionSuccessAction: (wordId: string, imageUrl: string, detectedObject: string) => Promise<boolean>;
@@ -492,6 +540,11 @@ const GameContext = createContext<GameContextType | undefined>(undefined);
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(gameReducer, initialState);
   const { user } = useAuth();
+  const [demoModeEnabled, setDemoModeEnabled] = React.useState(false);
+
+  useEffect(() => {
+    setDemoModeEnabled(loadDemoModeEnabled());
+  }, []);
 
   // 加载用户数据 - 登录用户从 Supabase 加载，未登录用户从本地存储加载
   useEffect(() => {
@@ -563,6 +616,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'NEXT_WORD', payload: word });
   };
 
+  const toggleDemoMode = () => {
+    const next = !loadDemoModeEnabled();
+    saveDemoModeEnabled(next);
+    // 为了保证“前5个固定顺序”每次都可重复，开启/关闭时都重置计数
+    saveDemoPickCount(0);
+    saveDemoSequenceIndex(0);
+    setDemoModeEnabled(next);
+  };
+
   // 收集成功处理（支持云端同步）
   const handleCollectionSuccessAction = useCallback(async (
     wordId: string,
@@ -588,6 +650,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       dispatch, 
       startNewGame, 
       nextWord,
+      demoModeEnabled,
+      toggleDemoMode,
       syncToCloud,
       syncReviewProgress,
       handleCollectionSuccessAction,

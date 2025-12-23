@@ -34,7 +34,7 @@ const ACHIEVEMENTS = [
 ];
 
 export default function HomePage() {
-  const { state, dispatch, startNewGame, nextWord, handleCollectionSuccessAction, isLoggedIn } = useGame();
+  const { state, dispatch, startNewGame, nextWord, handleCollectionSuccessAction, isLoggedIn, demoModeEnabled, toggleDemoMode } = useGame();
   const { currentWord, collectedImages, phase, userData, showHint, mode } = state;
   const [showVictory, setShowVictory] = useState(false);
   const { playClick, playSuccess, playShutter, playSwitch, playHint, playNav } = useSound();
@@ -777,6 +777,22 @@ export default function HomePage() {
 
       {/* 底部导航栏 */}
       <BottomNav currentMode={mode} onModeChange={handleModeChange} />
+
+      {/* Demo 模式开关（隐藏按钮） */}
+      {mode === 'HUNTER' && (
+        <button
+          onClick={() => {
+            toggleDemoMode();
+            startNewGame();
+          }}
+          className={`fixed right-2 bottom-2 z-50 px-2 py-1 rounded-md text-[10px] font-black tracking-wider select-none transition-opacity ${
+            demoModeEnabled ? 'bg-black/40 text-white/90 opacity-40' : 'bg-black/20 text-white/70 opacity-20'
+          }`}
+          title={demoModeEnabled ? 'Demo: ON' : 'Demo: OFF'}
+        >
+          DEMO
+        </button>
+      )}
 
       {/* 胜利弹窗 */}
       {currentWord && (

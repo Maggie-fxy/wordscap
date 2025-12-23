@@ -105,6 +105,8 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
       localStorage.removeItem('wordcaps_user_data');
       localStorage.removeItem('wordcaps_shown_achievements');
       localStorage.removeItem('wordcaps_demo_pick_count');
+      localStorage.removeItem('wordcaps_demo_mode_enabled');
+      localStorage.removeItem('wordcaps_demo_sequence_index');
 
       try {
         for (let i = localStorage.length - 1; i >= 0; i -= 1) {
