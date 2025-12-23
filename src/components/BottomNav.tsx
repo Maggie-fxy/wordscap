@@ -15,8 +15,8 @@ export function BottomNav({ currentMode, onModeChange }: BottomNavProps) {
   
   const navItems = [
     { mode: 'HUNTER' as GameMode, icon: Target, label: '狩猎' },
-    { mode: 'COLLECTION' as GameMode, icon: BookOpen, label: '收集册' },
-    { mode: 'REVIEW' as GameMode, icon: GraduationCap, label: '复习' },
+    { mode: 'COLLECTION' as GameMode, icon: BookOpen, label: '图鉴' },
+    { mode: 'REVIEW' as GameMode, icon: GraduationCap, label: '战斗' },
     { mode: 'WORDBOOK' as GameMode, icon: User, label: '我的' },
   ];
 
