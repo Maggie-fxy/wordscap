@@ -149,7 +149,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
   };
 
   return (
-    <div className="h-screen grass-bg flex flex-col overflow-y-auto pb-20">
+    <div className="h-screen grass-bg flex flex-col overflow-y-auto pb-14">
       {/* Header */}
       <header className="px-4 py-6 text-center wood-bg border-b-4 border-[#5D4037]">
         <h1 className="text-2xl font-black text-white drop-shadow-md">🎫 My Hunter Pass</h1>

@@ -213,10 +213,12 @@ function CollectedCard({ word, record, index, onClick }: { word: Word; record: W
         </div>
       )}
       
-      {/* 单词 */}
-      <div className="relative z-10 text-center px-1">
-        <p className="text-xs font-black text-[#5D4037] leading-tight truncate">{word.word}</p>
-        <p className="text-[10px] text-[#1B5E20] font-bold truncate">{word.cn}</p>
+      {/* 单词 - 自动缩小字体以适应长单词 */}
+      <div className="relative z-10 text-center px-0.5 w-full">
+        <p className={`font-black text-[#5D4037] leading-tight ${word.word.length > 8 ? 'text-[8px]' : word.word.length > 6 ? 'text-[10px]' : 'text-xs'}`}>
+          {word.word.length > 12 ? word.word.substring(0, 11) + '..' : word.word}
+        </p>
+        <p className="text-[9px] text-[#1B5E20] font-bold truncate">{word.cn}</p>
       </div>
       
       {/* 钻石价值 */}
@@ -270,7 +272,7 @@ export function WordBook({ onBack }: WordBookProps) {
   const totalDiamonds = collectedWords.reduce((sum, item) => sum + getDiamondsByDifficulty(item.word.difficulty), 0);
 
   return (
-    <div className="h-screen grass-bg flex flex-col overflow-hidden pb-20">
+    <div className="h-screen grass-bg flex flex-col overflow-hidden pb-14">
       {/* 顶部导航 - 去掉返回按钮 */}
       <header className="flex items-center justify-center px-4 py-3 wood-bg border-b-4 border-[#5D4037]">
         <h1 className="text-xl font-black text-white drop-shadow-md">📚 收集册</h1>

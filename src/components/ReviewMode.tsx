@@ -365,22 +365,24 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
       </header>
 
       {/* 主内容区 - 支持滚动以适配移动端键盘 */}
-      <div className="flex-1 flex flex-col p-4 overflow-y-auto pb-24">
+      <div className="flex-1 flex flex-col p-4 overflow-y-auto pb-16">
         {reviewWord && (
           <>
-            {/* 图片展示区 - 占1/2 */}
+            {/* 图片展示区 - 限制最大高度，确保题目可见 */}
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex-1 max-h-[50%] bg-white rounded-3xl border-4 border-[#5D4037] border-b-[14px] overflow-hidden mb-4"
+              className="bg-white rounded-2xl border-4 border-[#5D4037] border-b-8 overflow-hidden mb-3"
+              style={{ maxHeight: '35vh' }}
             >
               {displayImageUrl ? (
                 <img
                   src={displayImageUrl}
                   alt="Review"
-                  className="w-full h-full object-contain p-4"
+                  className="w-full h-full object-contain p-2"
                   style={{
                     background: 'linear-gradient(135deg, #C8E6C9 0%, #A5D6A7 100%)',
+                    maxHeight: '35vh',
                   }}
                 />
               ) : (

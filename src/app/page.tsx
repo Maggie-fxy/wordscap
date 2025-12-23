@@ -49,7 +49,7 @@ export default function HomePage() {
   const [newImageUrl, setNewImageUrl] = useState<string | null>(null); // 新收集的图片URL（用于动画）
   const [showImageAnimation, setShowImageAnimation] = useState(false); // 显示图片飞入动画
   const [unlockedAchievement, setUnlockedAchievement] = useState<typeof ACHIEVEMENTS[0] | null>(null); // 新解锁的成就
-  const [analyzingText, setAnalyzingText] = useState<string>('🔍 豆包AI识别中...');
+  const [analyzingText, setAnalyzingText] = useState<string>('🔍 让我看看这是什么...');
   const [showSplash, setShowSplash] = useState(true); // 开屏动画状态
   const [showAuthModal, setShowAuthModal] = useState(false); // 显示登录/注册弹窗
   const [forceAuth, setForceAuth] = useState(false); // 是否强制登录（游客收集满5张）
@@ -163,12 +163,21 @@ export default function HomePage() {
     }, 300);
   }, [nextWord, playSwitch]);
 
-  // 识别成功后自动跳转下一个单词 - 从图片动画开始后计时，确保用户看到完整动画
+  // 识别成功后自动跳转下一个单词
+  // 流程：抠图结束 -> 关闭相机 -> 显示飞入动画(2秒) -> 等待1.5秒 -> 自动换词
+  const autoSwitchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
+    // 只在 showImageAnimation 变为 true 时启动定时器
     if (showImageAnimation && mode === 'HUNTER') {
-      // 4秒后自动跳转到下一个单词（从动画开始计时）
-      const timer = setTimeout(() => {
-        // 直接调用换词逻辑，避免循环依赖
+      // 清除之前的定时器
+      if (autoSwitchTimerRef.current) {
+        clearTimeout(autoSwitchTimerRef.current);
+      }
+      // 动画显示2秒 + 等待1.5秒 = 3.5秒后自动换词
+      autoSwitchTimerRef.current = setTimeout(() => {
+        // 直接调用换词逻辑
+        playSwitch();
         setIsCardSwitching(true);
         setTimeout(() => {
           nextWord();
@@ -180,10 +189,20 @@ export default function HomePage() {
             setIsCardSwitching(false);
           }, 300);
         }, 300);
-      }, 4000);
-      return () => clearTimeout(timer);
+        autoSwitchTimerRef.current = null;
+      }, 3500); // 2秒动画 + 1.5秒等待
     }
-  }, [showImageAnimation, nextWord, mode]);
+    // 注意：不在 cleanup 中清除定时器，让它继续运行
+  }, [showImageAnimation, mode]);
+  
+  // 组件卸载时清理自动换词定时器
+  useEffect(() => {
+    return () => {
+      if (autoSwitchTimerRef.current) {
+        clearTimeout(autoSwitchTimerRef.current);
+      }
+    };
+  }, []);
 
   // 统一的倒计时管理 - 解决竞态条件
   useEffect(() => {
@@ -304,7 +323,7 @@ export default function HomePage() {
     isProcessingRef.current = true;
 
     try {
-      setAnalyzingText('🔍 豆包AI识别中...');
+      setAnalyzingText('🔍 让我看看这是什么...');
       const response = await fetch('/api/recognize', {
         method: 'POST',
         headers: {
@@ -333,14 +352,14 @@ export default function HomePage() {
         playSuccess();
 
         // 识别成功提示（在抠图前给用户一个明确反馈）
-        setAnalyzingText('✅ 物品识别成功');
+        setAnalyzingText('🎉 找到了！太棒了！');
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // 根据标志位决定是否抠图
         let finalImageUrl = imageData;
         if (REMOVE_BG_FLAG === 1) {
           try {
-            setAnalyzingText('🎨 生成贴纸中...');
+            setAnalyzingText('✨ 正在制作专属贴纸...');
             const removeBgResponse = await fetch('/api/removebg', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -366,6 +385,9 @@ export default function HomePage() {
         } catch (e) {
           console.log('图片压缩失败，使用原图:', e);
         }
+        
+        // 先关闭相机，再显示动画
+        dispatch({ type: 'STOP_CAMERA' });
         
         setNewImageUrl(finalImageUrl);
         setShowImageAnimation(true);
@@ -418,11 +440,13 @@ export default function HomePage() {
     isProcessingRef.current = true;
     
     dispatch({ type: 'START_ANALYZING' });
+    setAnalyzingText('👌 OK！我来帮你收藏！');
     
     // 根据标志位决定是否抠图
     let finalImageUrl = imageData;
     if (REMOVE_BG_FLAG === 1) {
       try {
+        setAnalyzingText('✨ 正在制作专属贴纸...');
         const removeBgResponse = await fetch('/api/removebg', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -448,6 +472,9 @@ export default function HomePage() {
     } catch (e) {
       console.log('图片压缩失败，使用原图:', e);
     }
+    
+    // 先关闭相机，再显示动画
+    dispatch({ type: 'STOP_CAMERA' });
     
     setNewImageUrl(finalImageUrl);
     setShowImageAnimation(true);
@@ -535,7 +562,7 @@ export default function HomePage() {
 
   // Hunter Page 布局
   return (
-    <div className="h-screen flex flex-col grass-bg overflow-hidden pb-24">
+    <div className="h-screen flex flex-col grass-bg overflow-hidden pb-16">
       {/* 整体卡片容器 - 带换词动画 */}
       <motion.div
         animate={{
@@ -616,8 +643,8 @@ export default function HomePage() {
                 </div>
 
                 {/* 单词显示 - 一开始不显示中文 */}
-                <div className="text-center py-3">
-                  <h2 className="text-5xl font-black text-text tracking-wide">
+                <div className="text-center py-2">
+                  <h2 className="text-4xl font-black text-text tracking-wide">
                     {currentWord.word}
                   </h2>
                 </div>
@@ -663,13 +690,14 @@ export default function HomePage() {
         {/* Middle: 相机或卡槽区域 */}
         <div className="flex-1 px-4 py-2 overflow-hidden relative">
           {isCameraActive ? (
-            /* 相机视图 */
-            <div className="h-full rounded-3xl overflow-hidden border-4 border-[#5D4037]">
+            /* 相机视图 - 限制最大高度，避免被底部导航遮挡 */
+            <div className="h-full rounded-3xl overflow-hidden border-4 border-[#5D4037]" style={{ maxHeight: 'calc(100vh - 280px)' }}>
               <CameraView
                 onCapture={handleCapture}
                 onClose={handleStopCamera}
                 onForceSuccess={handleForceSuccess}
                 analyzingText={analyzingText}
+                onAutoClose={handleStopCamera}
               />
             </div>
           ) : (
@@ -687,16 +715,16 @@ export default function HomePage() {
                 <CollectionGrid images={collectedImages} highlightLast={false} />
               </div>
               
-              {/* START HUNTING 按钮 - 2.5D风格 */}
+              {/* START HUNTING 按钮 - 2.5D风格，移动端适配缩小 */}
               <div className="flex-1 flex items-center justify-center">
                 <motion.button
                   whileHover={{ scale: 1.05, rotate: 3 }}
-                  whileTap={{ scale: 0.95, y: 10 }}
+                  whileTap={{ scale: 0.95, y: 6 }}
                   onClick={handleStartCamera}
                   disabled={!currentWord}
-                  className="btn-3d-lg w-40 h-40 rounded-full bg-[#FF5252] border-[#B71C1C] text-white font-black flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-3d-lg w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-[#FF5252] border-[#B71C1C] text-white font-black flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="text-xl font-black tracking-wide drop-shadow-md">START<br/>HUNTING</span>
+                  <span className="text-base sm:text-lg font-black tracking-wide drop-shadow-md text-center leading-tight">START<br/>HUNTING</span>
                 </motion.button>
               </div>
             </div>
@@ -742,7 +770,7 @@ export default function HomePage() {
 
       {/* 底部倒计时进度条 - 相机模式下隐藏，避免与拍照按钮重叠 */}
       {!isCameraActive && (
-      <div className="fixed bottom-28 left-0 right-0 px-4 z-30">
+      <div className="fixed bottom-16 left-0 right-0 px-4 z-30">
         {/* 倒计时秒数显示在进度条上方 */}
         <div className="flex items-center justify-center mb-1">
           <motion.span 

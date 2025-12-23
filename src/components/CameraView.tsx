@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Camera, RotateCcw, Check, Loader2 } from 'lucide-react';
 import { useCamera } from '@/hooks/useCamera';
@@ -13,13 +13,15 @@ interface CameraViewProps {
   onClose: () => void;
   onForceSuccess?: (imageData: string) => void;
   analyzingText?: string;
+  onAutoClose?: () => void; // Bug 4: 识别成功后自动关闭相机的回调
 }
 
-export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }: CameraViewProps) {
+export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, onAutoClose }: CameraViewProps) {
   const { videoRef, canvasRef, isStreaming, isFrontCamera, error, startCamera, stopCamera, captureImage } = useCamera();
   const { state, dispatch } = useGame();
   const { playShutter, playClick } = useSound();
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false); // Bug 3: 拍照后暂停视频流
 
   useEffect(() => {
     let mounted = true;
@@ -42,6 +44,11 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }
     playShutter(); // 快门音效
     const imageData = captureImage();
     if (imageData) {
+      // Bug 3: 拍照后暂停视频流，冻结画面
+      if (videoRef.current) {
+        videoRef.current.pause();
+        setIsPaused(true);
+      }
       onCapture(imageData);
     }
   };
@@ -54,6 +61,26 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }
   const isAnalyzing = state.phase === 'ANALYZING';
   const isFailed = state.phase === 'FAILED';
   const isSuccess = state.phase === 'SUCCESS';
+
+  // Bug 3: 当重试时恢复视频流
+  useEffect(() => {
+    if (state.phase === 'CAMERA' && isPaused && videoRef.current) {
+      videoRef.current.play();
+      setIsPaused(false);
+    }
+  }, [state.phase, isPaused, videoRef]);
+
+  // Bug 4: 识别成功后自动关闭相机
+  useEffect(() => {
+    if (isSuccess && onAutoClose) {
+      // 显示成功动画1.5秒后自动关闭
+      const timer = setTimeout(() => {
+        stopCamera();
+        onAutoClose();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isSuccess, onAutoClose, stopCamera]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-black overflow-hidden">
@@ -100,48 +127,65 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }
         )}
       </AnimatePresence>
 
-      {/* 失败反馈覆盖层 */}
+      {/* 失败反馈覆盖层 - Bug 5: 重新布局避免按钮重叠 */}
       <AnimatePresence>
         {isFailed && state.lastResult && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="absolute inset-0 bg-[#1B5E20]/80 flex flex-col items-center justify-center p-6"
+            className="absolute inset-0 bg-[#1B5E20]/80 flex flex-col p-4"
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="bg-white rounded-3xl p-6 max-w-xs text-center border-4 border-[#5D4037] border-b-[14px]"
-            >
-              <div className="w-16 h-16 bg-[#FF5252] rounded-full border-4 border-[#B71C1C] flex items-center justify-center mx-auto mb-4">
-                <X className="w-8 h-8 text-white" strokeWidth={3} />
-              </div>
-              <p className="text-[#5D4037] mb-2 font-bold">
-                我看到了 <span className="font-black text-[#FF5252]">{state.lastResult.detected_object_cn}</span>
-              </p>
-              <p className="text-[#1B5E20] text-sm mb-4 font-bold">
-                {state.lastResult.feedback || '但这不是我们要找的哦~'}
-              </p>
-            </motion.div>
+            {/* 上部：识别结果卡片 */}
+            <div className="flex-1 flex items-center justify-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="bg-white rounded-2xl p-4 max-w-[280px] text-center border-4 border-[#5D4037] border-b-8"
+              >
+                <div className="w-12 h-12 bg-[#FF5252] rounded-full border-4 border-[#B71C1C] flex items-center justify-center mx-auto mb-3">
+                  <X className="w-6 h-6 text-white" strokeWidth={3} />
+                </div>
+                <p className="text-[#5D4037] mb-1 font-bold text-sm">
+                  我看到了 <span className="font-black text-[#FF5252]">{state.lastResult.detected_object_cn}</span>
+                </p>
+                <p className="text-[#1B5E20] text-xs font-bold">
+                  {state.lastResult.feedback || '但这不是我们要找的哦~'}
+                </p>
+              </motion.div>
+            </div>
             
-            {/* 手动确认按钮 */}
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.7 }}
-              whileHover={{ opacity: 1 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                if (onForceSuccess && state.capturedImageUrl) {
-                  onForceSuccess(state.capturedImageUrl);
-                } else {
-                  dispatch({ type: 'FORCE_SUCCESS', payload: state.capturedImageUrl || '' });
-                }
-              }}
-              className="mt-6 px-4 py-2 bg-white/30 backdrop-blur-sm rounded-2xl text-white text-sm font-bold border-2 border-white/50"
-            >
-              I promise it&apos;s correct
-            </motion.button>
+            {/* 下部：按钮区域 - 垂直排列，上移避免被导航栏遮挡 */}
+            <div className="flex flex-col gap-2 pb-2 mb-4">
+              {/* 手动确认按钮 */}
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.8 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  if (onForceSuccess && state.capturedImageUrl) {
+                    onForceSuccess(state.capturedImageUrl);
+                  } else {
+                    dispatch({ type: 'FORCE_SUCCESS', payload: state.capturedImageUrl || '' });
+                  }
+                }}
+                className="w-full px-4 py-3 bg-white/20 backdrop-blur-sm rounded-2xl text-white text-sm font-bold border-2 border-white/40 text-center"
+              >
+                I promise it&apos;s correct
+              </motion.button>
+              
+              {/* 重新寻找按钮 */}
+              <motion.button
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => dispatch({ type: 'RETRY' })}
+                className="btn-3d w-full flex items-center justify-center gap-2 px-6 py-3 bg-[#4FC3F7] border-[#0288D1] rounded-2xl text-white font-black"
+              >
+                <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
+                <span className="drop-shadow-md">再试一次</span>
+              </motion.button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -199,34 +243,19 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText }
         <X className="w-5 h-5" strokeWidth={3} />
       </motion.button>
 
-      {/* 底部控制栏 - bottom-28 避开底部导航栏，pb-safe 适配移动端安全区域 */}
-      <div className="absolute bottom-28 left-0 right-0 p-6 flex items-center justify-center" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}>
-        {!isAnalyzing && !isSuccess && (
-          <>
-            {isFailed ? (
-              <motion.button
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                whileTap={{ scale: 0.95, y: 4 }}
-                onClick={() => dispatch({ type: 'RETRY' })}
-                className="btn-3d flex items-center gap-2 px-6 py-3 bg-[#4FC3F7] border-[#0288D1] rounded-2xl text-white font-black"
-              >
-                <RotateCcw className="w-5 h-5" strokeWidth={2.5} />
-                <span className="drop-shadow-md">再试一次</span>
-              </motion.button>
-            ) : (
-              <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={handleCapture}
-                disabled={!isStreaming}
-                className="w-20 h-20 rounded-full bg-white border-4 border-[#5D4037] border-b-8 flex items-center justify-center disabled:opacity-50"
-              >
-                <div className="w-14 h-14 rounded-full bg-[#FF5252] border-4 border-[#B71C1C] flex items-center justify-center">
-                  <Camera className="w-7 h-7 text-white drop-shadow-md" strokeWidth={2.5} />
-                </div>
-              </motion.button>
-            )}
-          </>
+      {/* 底部控制栏 - 拍照按钮 */}
+      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center">
+        {!isAnalyzing && !isSuccess && !isFailed && (
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={handleCapture}
+            disabled={!isStreaming}
+            className="w-14 h-14 rounded-full bg-white border-4 border-[#5D4037] border-b-6 flex items-center justify-center disabled:opacity-50"
+          >
+            <div className="w-9 h-9 rounded-full bg-[#FF5252] border-[3px] border-[#B71C1C] flex items-center justify-center">
+              <Camera className="w-4 h-4 text-white drop-shadow-md" strokeWidth={2.5} />
+            </div>
+          </motion.button>
         )}
       </div>
     </div>

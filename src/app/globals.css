@@ -87,9 +87,9 @@ body {
   border-bottom-width: 4px;
 }
 
-/* 相机视频流样式 */
+/* 相机视频流样式 - Bug 7: 使用cover填充容器，避免画面过度放大 */
 .camera-feed {
-  object-fit: contain;
+  object-fit: cover;
   width: 100%;
   height: 100%;
   /* 镜像效果现在由组件动态控制，只有前置摄像头才镜像 */

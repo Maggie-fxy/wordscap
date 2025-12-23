@@ -46,12 +46,15 @@ export function useCamera(): UseCameraReturn {
         return;
       }
       
-      // 请求相机权限，优先使用后置摄像头
+      // Bug 7: 检测设备方向，适配竖屏/横屏
+      const isPortrait = window.innerHeight > window.innerWidth;
+      
+      // 请求相机权限，优先使用后置摄像头，根据屏幕方向调整分辨率
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment', // 后置摄像头
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: isPortrait ? 720 : 1280 },
+          height: { ideal: isPortrait ? 1280 : 720 },
         },
         audio: false,
       });
