@@ -21,13 +21,14 @@ function getGlobalAudio(): HTMLAudioElement {
     
     // 监听意外暂停事件，自动恢复播放（微信浏览器兼容）
     globalAudio.addEventListener('pause', () => {
-      // 如果不是 TTS 主动暂停的，且应该播放，则自动恢复
+      // 如果不是 TTS 主动暂停的，且应该播放，则立即恢复
       if (!ttsPaused && bgmShouldPlay) {
-        setTimeout(() => {
+        // 使用 requestAnimationFrame 实现更丝滑的恢复
+        requestAnimationFrame(() => {
           if (globalAudio && bgmShouldPlay && !ttsPaused) {
             globalAudio.play().catch(() => {});
           }
-        }, 100);
+        });
       }
     });
   }
