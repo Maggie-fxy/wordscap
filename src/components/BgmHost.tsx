@@ -37,10 +37,11 @@ function getGlobalAudio(): HTMLAudioElement {
 
 // 导出函数供 TTS 使用：暂停 BGM
 export function pauseBgmForTTS() {
+  // 先设置标记，再暂停，确保 pause 事件监听器不会误恢复
+  ttsPaused = true;
   const audio = globalAudio;
   if (audio && !audio.paused) {
     bgmWasPlaying = true;
-    ttsPaused = true;
     audio.pause();
   }
 }
