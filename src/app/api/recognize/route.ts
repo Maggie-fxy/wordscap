@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // ==================== API 切换开关 ====================
-// 0 = 豆包API, 1 = Gemini API
-const API_PROVIDER = 1;
+// 0 = 豆包API, 1 = Gemini API, 2 = OpenRouter API
+const API_PROVIDER = 2;
 // =====================================================
 
 // 豆包视觉模型 API 配置 - Doubao-Seed-1.6-lite
@@ -14,6 +14,10 @@ const DOUBAO_MODEL_NAME = 'doubao-seed-1-6-lite-251015';
 
 // Gemini API 配置
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+// OpenRouter API 配置
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_MODEL = 'google/gemini-2.5-flash-lite';
 
 interface RecognizeRequest {
   imageBase64: string;
@@ -45,6 +49,13 @@ export async function POST(request: NextRequest) {
     const modelId = process.env.DOUBAO_MODEL_ID || DOUBAO_MODEL_NAME;
 
     // 根据开关选择 API
+    if (API_PROVIDER === 2) {
+      // 使用 OpenRouter API
+      console.log('🤖 OpenRouter AI识别中...');
+      const result = await callOpenRouterAPI(imageBase64, targetWord, targetWordCn);
+      return NextResponse.json(result);
+    }
+
     if (API_PROVIDER === 1) {
       // 使用 Gemini API
       console.log('🤖 Gemini AI识别中...');
@@ -157,6 +168,105 @@ JSON 结构:
       { status: 500 }
     );
   }
+}
+
+// OpenRouter API 调用函数
+async function callOpenRouterAPI(imageBase64: string, targetWord: string, targetWordCn: string): Promise<AIRecognitionResult> {
+  const startTime = Date.now();
+  
+  // 获取 OpenRouter API Key
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY 未配置，请在环境变量中设置');
+  }
+  
+  // 移除 base64 前缀
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  
+  // 构建 Prompt（与豆包相同的逻辑）
+  const prompt = `你是一个儿童英语寻宝游戏的裁判。
+1. 请识别图片中的核心物体。
+2. 判断该物体是否属于单词: "${targetWord}" (${targetWordCn}) 的范畴。（例如 target 是 CUP，那么马克杯、玻璃杯、纸杯都算 true）。
+3. 返回严格的 JSON 格式，不要 Markdown。
+
+JSON 结构:
+{
+  "is_match": boolean,
+  "detected_object_en": "string",
+  "detected_object_cn": "string", 
+  "feedback": "string"
+}
+
+注意：
+- detected_object_en: 你看到的物体英文名
+- detected_object_cn: 中文名
+- feedback: 如果 is_match 为 false，用幽默语气告诉孩子你看到了什么(15字内)。如果 is_match 为 true，留空字符串。`;
+
+  // 调用 OpenRouter API
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://wordhunter.app',
+      'X-Title': 'WordHunter Game',
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: prompt,
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Data}`,
+              },
+            },
+          ],
+        },
+      ],
+      temperature: 0.1,
+    }),
+  });
+
+  const elapsed = Date.now() - startTime;
+  console.log(`⏱️ OpenRouter API 响应时间: ${elapsed}ms`);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('OpenRouter API 错误:', errorText);
+    throw new Error(`OpenRouter API 调用失败: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error('OpenRouter API 返回内容为空');
+  }
+
+  // 解析 JSON 响应
+  let result: AIRecognitionResult;
+  try {
+    // 尝试直接解析
+    result = JSON.parse(content);
+  } catch {
+    // 尝试从文本中提取 JSON
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      result = JSON.parse(jsonMatch[0]);
+    } else {
+      console.error('OpenRouter 原始响应:', content);
+      throw new Error('无法解析 OpenRouter AI 响应');
+    }
+  }
+
+  return result;
 }
 
 // Gemini API 调用函数
