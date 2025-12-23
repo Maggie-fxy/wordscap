@@ -6,6 +6,11 @@ import { BgmProvider, useBgm } from '@/hooks/useBgm';
 function BgmIframe() {
   const { isPlaying } = useBgm();
 
+  // 调试日志
+  console.log('[BgmIframe] isPlaying:', isPlaying);
+
+  // isPlaying 控制 iframe 是否渲染
+  // 全局 Context 确保切换栏目时状态不变
   if (!isPlaying) return null;
 
   return (

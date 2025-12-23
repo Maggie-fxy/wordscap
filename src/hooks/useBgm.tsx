@@ -6,6 +6,7 @@ const BGM_ENABLED_KEY = 'wordcaps_bgm_enabled';
 
 interface BgmContextType {
   isPlaying: boolean;
+  hasEverStarted: boolean;
   playBgm: () => void;
   stopBgm: () => void;
   toggleBgm: () => void;
@@ -35,6 +36,7 @@ function getBgmPreference(): boolean {
 
 export function BgmProvider({ children }: { children: ReactNode }): JSX.Element {
   const [isPlaying, setIsPlaying] = useState(getInitialBgmState);
+  const [hasEverStarted, setHasEverStarted] = useState(false);
 
   const persist = useCallback((enabled: boolean) => {
     try {
@@ -48,6 +50,7 @@ export function BgmProvider({ children }: { children: ReactNode }): JSX.Element 
     // 只有当用户偏好是开启时才播放
     if (getBgmPreference()) {
       setIsPlaying(true);
+      setHasEverStarted(true);
     }
   }, []);
 
@@ -60,12 +63,15 @@ export function BgmProvider({ children }: { children: ReactNode }): JSX.Element 
     setIsPlaying(prev => {
       const next = !prev;
       persist(next);
+      if (next) {
+        setHasEverStarted(true);
+      }
       return next;
     });
   }, [persist]);
 
   return (
-    <BgmContext.Provider value={{ isPlaying, playBgm, stopBgm, toggleBgm }}>
+    <BgmContext.Provider value={{ isPlaying, hasEverStarted, playBgm, stopBgm, toggleBgm }}>
       {children}
     </BgmContext.Provider>
   );
