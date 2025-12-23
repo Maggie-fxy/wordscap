@@ -5,6 +5,7 @@ import { BgmProvider, useBgm } from '@/hooks/useBgm';
 
 // 全局单例 audio 实例，确保切换栏目时不被重新创建
 let globalAudio: HTMLAudioElement | null = null;
+let bgmWasPlaying = false;
 
 function getGlobalAudio(): HTMLAudioElement {
   if (!globalAudio && typeof window !== 'undefined') {
@@ -17,6 +18,24 @@ function getGlobalAudio(): HTMLAudioElement {
     globalAudio.playsInline = true;
   }
   return globalAudio!;
+}
+
+// 导出函数供 TTS 使用：暂停 BGM
+export function pauseBgmForTTS() {
+  const audio = globalAudio;
+  if (audio && !audio.paused) {
+    bgmWasPlaying = true;
+    audio.pause();
+  }
+}
+
+// 导出函数供 TTS 使用：恢复 BGM
+export function resumeBgmAfterTTS() {
+  const audio = globalAudio;
+  if (audio && bgmWasPlaying) {
+    bgmWasPlaying = false;
+    audio.play().catch(() => {});
+  }
 }
 
 function BgmPlayer() {
