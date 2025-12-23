@@ -6,12 +6,12 @@ import { BgmProvider, useBgm } from '@/hooks/useBgm';
 function BgmIframe() {
   const { isPlaying } = useBgm();
 
-  // 调试日志
-  console.log('[BgmIframe] isPlaying:', isPlaying);
+  // 只在生产环境（HTTPS）启用网易云 BGM，本地开发时禁用避免跨域问题
+  const isProduction = typeof window !== 'undefined' && window.location.protocol === 'https:';
 
   // isPlaying 控制 iframe 是否渲染
   // 全局 Context 确保切换栏目时状态不变
-  if (!isPlaying) return null;
+  if (!isPlaying || !isProduction) return null;
 
   return (
     <div
