@@ -6,6 +6,8 @@ import { BgmProvider, useBgm } from '@/hooks/useBgm';
 // 全局单例 audio 实例，确保切换栏目时不被重新创建
 let globalAudio: HTMLAudioElement | null = null;
 let bgmWasPlaying = false;
+let ttsPaused = false; // TTS 主动暂停的标记
+let bgmShouldPlay = false; // BGM 应该播放的状态
 
 function getGlobalAudio(): HTMLAudioElement {
   if (!globalAudio && typeof window !== 'undefined') {
@@ -16,6 +18,18 @@ function getGlobalAudio(): HTMLAudioElement {
     globalAudio.preload = 'auto';
     // @ts-ignore - playsInline 是有效属性
     globalAudio.playsInline = true;
+    
+    // 监听意外暂停事件，自动恢复播放（微信浏览器兼容）
+    globalAudio.addEventListener('pause', () => {
+      // 如果不是 TTS 主动暂停的，且应该播放，则自动恢复
+      if (!ttsPaused && bgmShouldPlay) {
+        setTimeout(() => {
+          if (globalAudio && bgmShouldPlay && !ttsPaused) {
+            globalAudio.play().catch(() => {});
+          }
+        }, 100);
+      }
+    });
   }
   return globalAudio!;
 }
@@ -25,17 +39,24 @@ export function pauseBgmForTTS() {
   const audio = globalAudio;
   if (audio && !audio.paused) {
     bgmWasPlaying = true;
+    ttsPaused = true;
     audio.pause();
   }
 }
 
 // 导出函数供 TTS 使用：恢复 BGM
 export function resumeBgmAfterTTS() {
+  ttsPaused = false;
   const audio = globalAudio;
   if (audio && bgmWasPlaying) {
     bgmWasPlaying = false;
     audio.play().catch(() => {});
   }
+}
+
+// 设置 BGM 应该播放的状态
+export function setBgmShouldPlay(shouldPlay: boolean) {
+  bgmShouldPlay = shouldPlay;
 }
 
 function BgmPlayer() {
@@ -45,6 +66,9 @@ function BgmPlayer() {
   useEffect(() => {
     const audio = getGlobalAudio();
     if (!audio) return;
+
+    // 同步全局状态
+    setBgmShouldPlay(isPlaying);
 
     if (isPlaying) {
       // 微信浏览器需要用户交互后才能播放
