@@ -10,6 +10,15 @@ import {
   updateUserStats,
   upsertWordRecord 
 } from '@/lib/supabase/dataService';
+import { 
+  CLEAR_DATA_FLAG, 
+  REMOVE_BG_FLAG, 
+  MAX_IMAGES_PER_WORD, 
+  MAX_GUEST_IMAGES 
+} from '@/config/flags';
+
+// 重新导出标志位，保持向后兼容
+export { REMOVE_BG_FLAG, MAX_GUEST_IMAGES } from '@/config/flags';
 
 // 本地存储键（用于未登录用户的本地缓存）
 const STORAGE_KEY = 'wordcaps_user_data';
@@ -39,17 +48,7 @@ const initialState: GameState = {
   showHint: false,
 };
 
-// 清除数据开关：1=清除旧数据，0=正常加载
-const CLEAR_DATA_FLAG: number = 0;        //CLEAR_DATA_FLAG = 1 → 清除所有旧数据 CLEAR_DATA_FLAG = 0 → 正常加载数据（当前状态）
-
-// 抠图模式：0=使用Gemini抠图，1=使用PHOTOROOM抠图，2=不抠图使用原图
-export const REMOVE_BG_FLAG: number = 0;  //REMOVE_BG_FLAG = 0 → Gemini抠图(通过OpenRouter) REMOVE_BG_FLAG = 1 → PHOTOROOM抠图 REMOVE_BG_FLAG = 2 → 不抠图使用原图
-
-// 每个单词最多保存的图片数量
-const MAX_IMAGES_PER_WORD = 6;
-
-// 游客模式下最多收集的图片总数（超过后强制登录）
-export const MAX_GUEST_IMAGES = 5;
+// 标志位已移至 @/config/flags.ts 统一管理
 
 // Demo 抽词计数：前30次必出 Demo 词池
 const DEMO_PICK_COUNT_KEY = 'wordcaps_demo_pick_count';
