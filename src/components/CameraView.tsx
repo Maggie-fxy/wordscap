@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Camera, RotateCcw, Check, Loader2 } from 'lucide-react';
+import { X, Camera, RotateCcw, Check, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import { useCamera } from '@/hooks/useCamera';
 import { useGame } from '@/context/GameContext';
 import { useSound } from '@/hooks/useSound';
@@ -17,7 +17,8 @@ interface CameraViewProps {
 }
 
 export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, onAutoClose }: CameraViewProps) {
-  const { videoRef, canvasRef, isStreaming, isFrontCamera, error, startCamera, stopCamera, captureImage } = useCamera();
+  const { videoRef, canvasRef, isStreaming, isFrontCamera, error, zoom, minZoom, maxZoom, setZoom, startCamera, stopCamera, captureImage } = useCamera();
+  const supportsZoom = maxZoom > minZoom;
   const { state, dispatch } = useGame();
   const { playShutter, playClick } = useSound();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -243,8 +244,31 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
         <X className="w-5 h-5" strokeWidth={3} />
       </motion.button>
 
-      {/* 底部控制栏 - 拍照按钮 */}
-      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center">
+      {/* 底部控制栏 - 拍照按钮和缩放控制 */}
+      <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center gap-3">
+        {/* 缩放控制条 */}
+        {!isAnalyzing && !isSuccess && !isFailed && supportsZoom && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1.5"
+          >
+            <ZoomOut className="w-4 h-4 text-white" strokeWidth={2} />
+            <input
+              type="range"
+              min={minZoom}
+              max={maxZoom}
+              step={0.1}
+              value={zoom}
+              onChange={(e) => setZoom(parseFloat(e.target.value))}
+              className="w-24 h-1 accent-white cursor-pointer"
+            />
+            <ZoomIn className="w-4 h-4 text-white" strokeWidth={2} />
+            <span className="text-white text-xs font-bold min-w-[28px]">{zoom.toFixed(1)}x</span>
+          </motion.div>
+        )}
+        
+        {/* 拍照按钮 */}
         {!isAnalyzing && !isSuccess && !isFailed && (
           <motion.button
             whileTap={{ scale: 0.9 }}

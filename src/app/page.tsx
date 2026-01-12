@@ -313,7 +313,7 @@ export default function HomePage() {
     );
   }
 
-  // AI 识别处理
+  // AI 识别处理 - 识图和抠图并行执行以提升速度
   const handleAnalyze = async (imageData: string) => {
     if (!currentWord) return;
     
@@ -325,20 +325,41 @@ export default function HomePage() {
     isProcessingRef.current = true;
 
     try {
-      setAnalyzingText('🔍 让我看看这是什么...');
-      const response = await fetch('/api/recognize', {
+      setAnalyzingText('🔍 正在识别和制作贴纸...');
+      
+      // 并行执行识图和抠图
+      const recognizePromise = fetch('/api/recognize', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageBase64: imageData,
           targetWord: currentWord.word,
           targetWordCn: currentWord.cn,
         }),
-      });
-
-      const result = await response.json();
+      }).then(res => res.json());
+      
+      // 同时启动抠图（不等待识别结果）
+      let removeBgPromise: Promise<{ success: boolean; imageUrl?: string; error?: string }> | null = null;
+      if (REMOVE_BG_FLAG === 0) {
+        removeBgPromise = fetch('/api/removebg-gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: imageData,
+            targetWord: currentWord.word,
+            targetWordCn: currentWord.cn,
+          }),
+        }).then(res => res.json()).catch(() => ({ success: false }));
+      } else if (REMOVE_BG_FLAG === 1) {
+        removeBgPromise = fetch('/api/removebg', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: imageData }),
+        }).then(res => res.json()).catch(() => ({ success: false }));
+      }
+      
+      // 等待识别结果
+      const result = await recognizePromise;
 
       if (result.error) {
         dispatch({ type: 'SET_ERROR', payload: result.error });
@@ -352,57 +373,18 @@ export default function HomePage() {
       if (aiResult.is_match) {
         // 播放成功音效
         playSuccess();
-
-        // 识别成功提示（在抠图前给用户一个明确反馈）
-        setAnalyzingText('🎉 找到了！太棒了！');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        setAnalyzingText('🎉 太棒了！正在生成贴纸...');
         
-        // 根据标志位决定抠图方式：0=Gemini, 1=PHOTOROOM, 2=不抠图
+        // 等待抠图结果（如果有的话）
         let finalImageUrl = imageData;
-        if (REMOVE_BG_FLAG === 0) {
-          // Gemini 抠图（通过 OpenRouter）
-          try {
-            setAnalyzingText('✨ Gemini 正在制作专属贴纸...');
-            const removeBgResponse = await fetch('/api/removebg-gemini', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                imageBase64: imageData,
-                targetWord: currentWord.word,
-                targetWordCn: currentWord.cn,
-              }),
-            });
-            const removeBgResult = await removeBgResponse.json();
-            if (removeBgResult.success && removeBgResult.imageUrl) {
-              finalImageUrl = removeBgResult.imageUrl;
-              console.log('Gemini 抠图成功');
-            } else {
-              console.log('Gemini 抠图失败，使用原图:', removeBgResult.error);
-            }
-          } catch (e) {
-            console.log('Gemini 抠图请求失败，使用原图:', e);
+        if (removeBgPromise) {
+          const removeBgResult = await removeBgPromise;
+          if (removeBgResult.success && removeBgResult.imageUrl) {
+            finalImageUrl = removeBgResult.imageUrl;
+            console.log('抠图成功');
+          } else {
+            console.log('抠图失败，使用原图');
           }
-        } else if (REMOVE_BG_FLAG === 1) {
-          // PHOTOROOM 抠图
-          try {
-            setAnalyzingText('✨ 正在制作专属贴纸...');
-            const removeBgResponse = await fetch('/api/removebg', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ imageBase64: imageData }),
-            });
-            const removeBgResult = await removeBgResponse.json();
-            if (removeBgResult.success && removeBgResult.imageUrl) {
-              finalImageUrl = removeBgResult.imageUrl;
-              console.log('PHOTOROOM 抠图成功，剩余配额:', removeBgResult.remainingCredits);
-            } else {
-              console.log('PHOTOROOM 抠图失败，使用原图:', removeBgResult.error);
-            }
-          } catch (e) {
-            console.log('PHOTOROOM 抠图请求失败，使用原图:', e);
-          }
-        } else {
-          console.log('抠图开关关闭，使用原图');
         }
         
         // 压缩图片以避免localStorage溢出

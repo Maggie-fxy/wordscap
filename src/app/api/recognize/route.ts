@@ -59,24 +59,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(mockResult);
     }
 
-    // 构建 Prompt
-    const systemPrompt = `你是一个儿童英语寻宝游戏的裁判。
-1. 请识别图片中的核心物体。
-2. 判断该物体是否属于单词: "${targetWord}" (${targetWordCn}) 的范畴。（例如 target 是 CUP，那么马克杯、玻璃杯、纸杯都算 true）。
-3. 返回严格的 JSON 格式，不要 Markdown。
-
-JSON 结构:
-{
-  "is_match": boolean,
-  "detected_object_en": "string",
-  "detected_object_cn": "string", 
-  "feedback": "string"
-}
-
-注意：
-- detected_object_en: 你看到的物体英文名
-- detected_object_cn: 中文名
-- feedback: 如果 is_match 为 false，用幽默语气告诉孩子你看到了什么(15字内)。如果 is_match 为 true，留空字符串。`;
+    // 精简的 Prompt
+    const systemPrompt = `识别图片中的物体，判断是否是"${targetWord}"(${targetWordCn})。宽松判断：同类物品都算匹配。
+返回JSON: {"is_match":bool,"detected_object_en":"str","detected_object_cn":"str","feedback":"str"}
+feedback: 匹配时留空，不匹配时用可爱语气说看到什么(10字内)。`;
 
     // 移除 base64 前缀
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
@@ -169,24 +155,10 @@ async function callOpenRouterAPI(imageBase64: string, targetWord: string, target
   // 移除 base64 前缀
   const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
   
-  // 构建 Prompt（与豆包相同的逻辑）
-  const prompt = `你是一个儿童英语寻宝游戏的裁判。
-1. 请识别图片中的核心物体。
-2. 判断该物体是否属于单词: "${targetWord}" (${targetWordCn}) 的范畴。（例如 target 是 CUP，那么马克杯、玻璃杯、纸杯都算 true）。
-3. 返回严格的 JSON 格式，不要 Markdown。
-
-JSON 结构:
-{
-  "is_match": boolean,
-  "detected_object_en": "string",
-  "detected_object_cn": "string", 
-  "feedback": "string"
-}
-
-注意：
-- detected_object_en: 你看到的物体英文名
-- detected_object_cn: 中文名
-- feedback: 如果 is_match 为 false，用幽默语气告诉孩子你看到了什么(15字内)。如果 is_match 为 true，留空字符串。`;
+  // 精简的 Prompt
+  const prompt = `识别图片中的物体，判断是否是"${targetWord}"(${targetWordCn})。宽松判断：同类物品都算匹配。
+返回JSON: {"is_match":bool,"detected_object_en":"str","detected_object_cn":"str","feedback":"str"}
+feedback: 匹配时留空，不匹配时用可爱语气说看到什么(10字内)。`;
 
   // 调用 OpenRouter API
   const response = await fetch(OPENROUTER_API_URL, {

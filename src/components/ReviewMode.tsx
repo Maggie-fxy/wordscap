@@ -360,7 +360,7 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
         >
           <ArrowLeft className="w-5 h-5 text-white drop-shadow-md" strokeWidth={2.5} />
         </motion.button>
-        <h1 className="text-xl font-black text-white drop-shadow-md">复习模式</h1>
+        <h1 className="text-xl font-black text-white drop-shadow-md">战斗模式</h1>
         <div className="w-10" />
       </header>
 
@@ -526,7 +526,7 @@ export function ReviewMode({ onBack }: ReviewModeProps) {
                     <input
                       type="text"
                       value={spellingInput}
-                      onChange={(e) => setSpellingInput(e.target.value.toUpperCase())}
+                      onChange={(e) => setSpellingInput(e.target.value.toLowerCase())}
                       onKeyDown={(e) => e.key === 'Enter' && handleSpellingSubmit()}
                       onFocus={(e) => {
                         // 移动端键盘弹出时，滚动输入框到可见区域

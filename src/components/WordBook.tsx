@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Star, X, Diamond, Lock, Sparkles } from 'lucide-react';
+import { Check, Star, X, Diamond, Lock, Sparkles, Volume2 } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
 import { useSound } from '@/hooks/useSound';
 import { getWordById, WORD_BANK } from '@/data/wordBank';
@@ -45,6 +45,15 @@ function CutePlus() {
 function WordDetailModal({ word, record, onClose }: { word: Word; record?: WordRecord; onClose: () => void }) {
   const diamonds = getDiamondsByDifficulty(word.difficulty);
   const rarity = getRarityLabel(word.difficulty);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // 播放单词读音
+  const playPronunciation = () => {
+    const utterance = new SpeechSynthesisUtterance(word.word.toLowerCase());
+    utterance.lang = 'en-US';
+    utterance.rate = 0.8;
+    speechSynthesis.speak(utterance);
+  };
   
   // 模拟含义数据（实际应该从word.meanings获取）
   const meanings = word.meanings || [
@@ -85,6 +94,13 @@ function WordDetailModal({ word, record, onClose }: { word: Word; record?: WordR
         <div className="text-center mb-4">
           <div className="flex items-center justify-center gap-2 mb-1">
             <h2 className="text-3xl font-black text-[#5D4037]">{word.word.toLowerCase()}</h2>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={playPronunciation}
+              className="w-8 h-8 bg-[#4FC3F7] border-2 border-[#0288D1] rounded-full flex items-center justify-center"
+            >
+              <Volume2 className="w-4 h-4 text-white" strokeWidth={2.5} />
+            </motion.button>
             <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${rarity.bgColor} ${rarity.color} border ${rarity.borderColor}`}>
               {rarity.label}
             </span>
@@ -128,16 +144,54 @@ function WordDetailModal({ word, record, onClose }: { word: Word; record?: WordR
         {/* 收集的图片 */}
         {record && record.images.length > 0 && (
           <div className="mt-4">
-            <h3 className="text-sm font-bold text-[#5D4037] mb-2">📸 我的收集</h3>
+            <h3 className="text-sm font-bold text-[#5D4037] mb-2">📸 我的收集 (点击查看大图)</h3>
             <div className="grid grid-cols-3 gap-2">
               {record.images.map((img, idx) => (
-                <div key={idx} className="aspect-square rounded-xl overflow-hidden border-2 border-[#5D4037]">
+                <motion.div 
+                  key={idx} 
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setSelectedImage(img.url)}
+                  className="aspect-square rounded-xl overflow-hidden border-2 border-[#5D4037] cursor-pointer hover:border-[#4FC3F7] transition-colors"
+                >
                   <img src={img.url} alt="" className="w-full h-full object-cover" />
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>
         )}
+        
+        {/* 大图查看弹窗 */}
+        <AnimatePresence>
+          {selectedImage && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80"
+              onClick={() => setSelectedImage(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.5 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.5 }}
+                className="relative max-w-[90vw] max-h-[80vh]"
+              >
+                <img 
+                  src={selectedImage} 
+                  alt="贴纸大图" 
+                  className="max-w-full max-h-[80vh] object-contain rounded-2xl border-4 border-white"
+                />
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setSelectedImage(null)}
+                  className="absolute -top-3 -right-3 w-10 h-10 bg-[#FF5252] border-3 border-[#B71C1C] rounded-full flex items-center justify-center"
+                >
+                  <X className="w-5 h-5 text-white" strokeWidth={3} />
+                </motion.button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );
