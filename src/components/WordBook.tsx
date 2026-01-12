@@ -48,11 +48,16 @@ function WordDetailModal({ word, record, onClose }: { word: Word; record?: WordR
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   // 播放单词读音
-  const playPronunciation = () => {
+  const playPronunciation = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    // 先取消之前的语音
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(word.word.toLowerCase());
     utterance.lang = 'en-US';
     utterance.rate = 0.8;
-    speechSynthesis.speak(utterance);
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
   };
   
   // 模拟含义数据（实际应该从word.meanings获取）
@@ -96,7 +101,7 @@ function WordDetailModal({ word, record, onClose }: { word: Word; record?: WordR
             <h2 className="text-3xl font-black text-[#5D4037]">{word.word.toLowerCase()}</h2>
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={playPronunciation}
+              onClick={(e) => playPronunciation(e)}
               className="w-8 h-8 bg-[#4FC3F7] border-2 border-[#0288D1] rounded-full flex items-center justify-center"
             >
               <Volume2 className="w-4 h-4 text-white" strokeWidth={2.5} />

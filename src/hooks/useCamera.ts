@@ -76,9 +76,18 @@ export function useCamera(): UseCameraReturn {
       if (videoTrack) {
         const capabilities = videoTrack.getCapabilities?.() as MediaTrackCapabilities & { zoom?: { min: number; max: number } };
         if (capabilities?.zoom) {
-          setMinZoom(capabilities.zoom.min || 1);
-          setMaxZoom(capabilities.zoom.max || 1);
-          setZoomState(1); // 默认1x
+          const min = capabilities.zoom.min || 1;
+          const max = capabilities.zoom.max || 1;
+          setMinZoom(min);
+          setMaxZoom(max);
+          setZoomState(min); // 默认最小缩放（1x）
+          // 立即应用1x缩放
+          try {
+            (videoTrack as MediaStreamTrack & { applyConstraints: (c: { advanced: Array<{ zoom: number }> }) => Promise<void> })
+              .applyConstraints({ advanced: [{ zoom: min }] });
+          } catch (e) {
+            console.log('Initial zoom apply failed:', e);
+          }
         }
       }
 
