@@ -175,3 +175,159 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 - 支持 PWA 安装
 - 相机 API 需要 HTTPS
 - 推荐使用手机浏览器访问
+
+---
+
+## 📷 相机缩放功能调试记录 (2026-01-13)
+
+### 问题背景
+在移动端 H5 中实现相机缩放功能时，遇到以下挑战：
+1. `MediaStreamTrack.applyConstraints({ zoom })` 在很多移动端浏览器（Android WebView / 华为浏览器 / 微信 WebView）中不报错但无效果
+2. `getCapabilities().zoom` 在部分设备上不存在或返回 min=max=1
+3. 双指捏合手势被浏览器页面缩放劫持
+4. 前置摄像头不支持硬件 zoom
+
+### 最终方案：硬件优先 + 软件兜底
+
+#### 缩放策略架构
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    UI Zoom: 0.5x ~ 3x                       │
+├─────────────────────────────────────────────────────────────┤
+│  zoom < 1 (0.5x ~ 1x)                                       │
+│  ├── 禁用硬件 zoom（重置到 1x）                              │
+│  └── 使用软件缩放（CSS transform + Canvas 缩小）            │
+├─────────────────────────────────────────────────────────────┤
+│  zoom >= 1 (1x ~ 3x)                                        │
+│  ├── 优先尝试硬件 zoom (applyConstraints)                   │
+│  │   ├── 成功 → 使用硬件 zoom                               │
+│  │   └── 失败 → fallback 到软件 zoom                        │
+│  └── 前置摄像头 → 始终使用软件 zoom                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 核心状态设计
+```typescript
+// useCamera.ts
+const [zoom, setZoomState] = useState(1);           // UI zoom (0.5 ~ 3)
+const [minZoom] = useState(0.5);                    // UI 最小值
+const [maxZoom, setMaxZoom] = useState(3);          // UI 最大值
+const [hardwareZoomAvailable, setHardwareZoomAvailable] = useState(false);
+const [softwareZoomActive, setSoftwareZoomActive] = useState(false);
+const [hardwareZoomMax, setHardwareZoomMax] = useState(1);
+```
+
+#### setZoom 核心逻辑
+```typescript
+const setZoom = useCallback((newZoom: number) => {
+  const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+  setZoomState(clampedZoom);
+  
+  // 前置摄像头：始终软件 zoom
+  if (isFrontCamera) {
+    setSoftwareZoomActive(true);
+    return;
+  }
+  
+  // zoom < 1：禁用硬件，使用软件缩放
+  if (clampedZoom < 1) {
+    if (trackRef.current && hardwareZoomAvailable) {
+      applyZoomToTrack(trackRef.current, 1); // 重置硬件到 1x
+    }
+    setSoftwareZoomActive(true);
+    return;
+  }
+  
+  // zoom >= 1：尝试硬件 zoom
+  if (hardwareZoomAvailable && trackRef.current) {
+    const hwZoom = Math.min(clampedZoom, hardwareZoomMax);
+    applyZoomToTrack(trackRef.current, hwZoom).then(success => {
+      setSoftwareZoomActive(!success || clampedZoom > hardwareZoomMax);
+    });
+  } else {
+    setSoftwareZoomActive(true);
+  }
+}, [minZoom, maxZoom, isFrontCamera, hardwareZoomAvailable, hardwareZoomMax]);
+```
+
+#### 视频预览处理
+```tsx
+// CameraView.tsx
+<video
+  style={{ 
+    transform: `${isFrontCamera ? 'scaleX(-1)' : ''} ${softwareZoomActive && zoom !== 1 ? `scale(${zoom})` : ''}`,
+    transformOrigin: 'center center',
+    transition: 'transform 0.1s ease-out'  // 丝滑过渡
+  }}
+/>
+```
+
+#### captureImage 处理
+```typescript
+if (softwareZoomActive && zoom !== 1) {
+  if (zoom < 1) {
+    // 缩小：绘制整个视频到缩小的中心区域
+    const scale = zoom;
+    const outputWidth = videoWidth * scale;
+    const outputHeight = videoHeight * scale;
+    const offsetX = (videoWidth - outputWidth) / 2;
+    const offsetY = (videoHeight - outputHeight) / 2;
+    context.drawImage(video, 0, 0, videoWidth, videoHeight, 
+                      offsetX, offsetY, outputWidth, outputHeight);
+  } else {
+    // 放大：裁剪中心区域并放大
+    const cropWidth = videoWidth / zoom;
+    const cropHeight = videoHeight / zoom;
+    const cropX = (videoWidth - cropWidth) / 2;
+    const cropY = (videoHeight - cropHeight) / 2;
+    context.drawImage(video, cropX, cropY, cropWidth, cropHeight,
+                      0, 0, videoWidth, videoHeight);
+  }
+}
+```
+
+#### 防止浏览器 Pinch 劫持
+```tsx
+<div 
+  style={{ touchAction: 'none' }}  // CSS 级阻止
+  onTouchStart={(e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();  // JS 级阻止
+    }
+  }}
+  onTouchMove={(e) => {
+    if (isPinching) e.preventDefault();
+  }}
+/>
+```
+
+#### 硬件 zoom 兼容性处理
+```typescript
+// 兼容 Android WebView / 华为浏览器
+const applyZoomToTrack = async (track, zoomValue) => {
+  // 方法1: advanced constraints (标准)
+  try {
+    await track.applyConstraints({ advanced: [{ zoom: zoomValue }] });
+    return true;
+  } catch {}
+  
+  // 方法2: 直接设置 (某些 WebView)
+  try {
+    await track.applyConstraints({ zoom: zoomValue });
+    return true;
+  } catch {}
+  
+  return false;
+};
+```
+
+### 关键文件
+- `src/hooks/useCamera.ts` - 相机 Hook，zoom 状态管理
+- `src/components/CameraView.tsx` - 相机视图，UI 交互
+
+### 测试要点
+1. 后置摄像头：0.5x ~ 3x 全范围测试
+2. 前置摄像头：确认始终使用软件 zoom
+3. 截图一致性：UI 显示与 captureImage 输出一致
+4. 双指捏合：确认不被浏览器劫持
+5. 滑杆控制：确认与捏合使用同一状态源

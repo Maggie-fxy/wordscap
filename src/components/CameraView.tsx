@@ -138,7 +138,8 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
       {/* 隐藏的 canvas 用于截图 */}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* 相机预览 - 软件zoom时使用CSS transform放大 */}
+      {/* 相机预览 - 软件zoom时使用CSS transform缩放 */}
+      {/* zoom < 1: 缩小（看到更多）, zoom > 1: 放大（看到更少） */}
       <video
         ref={videoRef}
         autoPlay
@@ -146,8 +147,9 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
         muted
         className={`camera-feed ${isAnalyzing ? 'blur-sm' : ''}`}
         style={{ 
-          transform: `${isFrontCamera ? 'scaleX(-1)' : ''} ${softwareZoomActive && zoom > 1 ? `scale(${zoom})` : ''}`.trim() || 'none',
-          transformOrigin: 'center center'
+          transform: `${isFrontCamera ? 'scaleX(-1)' : ''} ${softwareZoomActive && zoom !== 1 ? `scale(${zoom})` : ''}`.trim() || 'none',
+          transformOrigin: 'center center',
+          transition: 'transform 0.1s ease-out'
         }}
       />
 

@@ -13,9 +13,9 @@ interface UseCameraReturn {
   isStreaming: boolean;
   isFrontCamera: boolean;
   error: string | null;
-  zoom: number;
-  minZoom: number;
-  maxZoom: number;
+  zoom: number;                   // UI zoom (0.5x ~ 3x)
+  minZoom: number;                // UI最小值 (0.5)
+  maxZoom: number;                // UI最大值 (3)
   hardwareZoomAvailable: boolean; // 硬件zoom是否可用
   softwareZoomActive: boolean;    // 是否正在使用软件zoom
   setZoom: (zoom: number) => void;
@@ -24,9 +24,11 @@ interface UseCameraReturn {
   captureImage: () => string | null;
 }
 
-// 软件zoom配置
-const SOFTWARE_ZOOM_MIN = 1;
-const SOFTWARE_ZOOM_MAX = 4;
+// UI zoom 配置：0.5x ~ 3x
+const UI_ZOOM_MIN = 0.5;
+const UI_ZOOM_MAX = 3;
+// 硬件zoom只支持 >= 1
+const HARDWARE_ZOOM_MIN = 1;
 
 export function useCamera(): UseCameraReturn {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -36,14 +38,13 @@ export function useCamera(): UseCameraReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isFrontCamera, setIsFrontCamera] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [zoom, setZoomState] = useState(1);
-  const [minZoom, setMinZoom] = useState(1);
-  const [maxZoom, setMaxZoom] = useState(SOFTWARE_ZOOM_MAX);
+  const [zoom, setZoomState] = useState(1);           // UI zoom
+  const [minZoom] = useState(UI_ZOOM_MIN);            // 固定0.5
+  const [maxZoom, setMaxZoom] = useState(UI_ZOOM_MAX); // 固定3（或硬件更大时取更大值）
   const [hardwareZoomAvailable, setHardwareZoomAvailable] = useState(false);
   const [softwareZoomActive, setSoftwareZoomActive] = useState(false);
+  const [hardwareZoomMax, setHardwareZoomMax] = useState(1); // 硬件zoom最大值
   const trackRef = useRef<MediaStreamTrack | null>(null);
-  const hardwareZoomTestedRef = useRef(false);
-  const hardwareZoomWorksRef = useRef(false);
 
   // 应用zoom到视频轨道 - 兼容Android WebView/华为浏览器
   const applyZoomToTrack = async (track: MediaStreamTrack, zoomValue: number): Promise<boolean> => {
@@ -126,16 +127,16 @@ export function useCamera(): UseCameraReturn {
           console.log('getCapabilities failed:', e);
         }
         
-        // 设置zoom范围
+        // 设置zoom范围 - UI始终0.5x~3x，硬件zoom范围单独记录
         if (hasZoomSupport) {
-          setMinZoom(detectedMin);
-          setMaxZoom(Math.max(detectedMax, SOFTWARE_ZOOM_MAX));
+          setHardwareZoomMax(detectedMax);
+          setMaxZoom(Math.max(UI_ZOOM_MAX, detectedMax));
           setHardwareZoomAvailable(true);
           setSoftwareZoomActive(false);
         } else {
-          // 硬件不支持，使用软件zoom范围
-          setMinZoom(SOFTWARE_ZOOM_MIN);
-          setMaxZoom(SOFTWARE_ZOOM_MAX);
+          // 硬件不支持
+          setHardwareZoomMax(1);
+          setMaxZoom(UI_ZOOM_MAX);
           setHardwareZoomAvailable(false);
           setSoftwareZoomActive(true);
         }
@@ -252,26 +253,52 @@ export function useCamera(): UseCameraReturn {
     const videoWidth = video.videoWidth;
     const videoHeight = video.videoHeight;
 
-    // 软件zoom：裁剪视频中心区域并放大
-    if (softwareZoomActive && zoom > 1) {
-      // 计算裁剪区域（ROI - Region of Interest）
-      const cropWidth = videoWidth / zoom;
-      const cropHeight = videoHeight / zoom;
-      const cropX = (videoWidth - cropWidth) / 2;
-      const cropY = (videoHeight - cropHeight) / 2;
+    // 软件zoom处理
+    // zoom < 1：缩小（显示更大视野，但截图时裁剪中心）
+    // zoom > 1：放大（裁剪中心区域）
+    if (softwareZoomActive && zoom !== 1) {
+      if (zoom < 1) {
+        // zoom < 1：缩小效果
+        // 截图时仍然输出原尺寸，但内容是缩小后的中心区域
+        // 实际上是"看到更多"，截图时裁剪中心部分
+        const scale = zoom; // 0.5 ~ 1
+        const outputWidth = videoWidth * scale;
+        const outputHeight = videoHeight * scale;
+        const offsetX = (videoWidth - outputWidth) / 2;
+        const offsetY = (videoHeight - outputHeight) / 2;
 
-      // 输出尺寸保持原视频尺寸（放大后的效果）
-      canvas.width = videoWidth;
-      canvas.height = videoHeight;
+        canvas.width = videoWidth;
+        canvas.height = videoHeight;
+        
+        // 先清空画布
+        context.fillStyle = '#000';
+        context.fillRect(0, 0, videoWidth, videoHeight);
+        
+        // 绘制缩小后的视频到中心
+        context.drawImage(
+          video,
+          0, 0, videoWidth, videoHeight,           // 源：整个视频
+          offsetX, offsetY, outputWidth, outputHeight  // 目标：缩小到中心
+        );
+      } else {
+        // zoom > 1：放大效果（裁剪中心区域）
+        const cropWidth = videoWidth / zoom;
+        const cropHeight = videoHeight / zoom;
+        const cropX = (videoWidth - cropWidth) / 2;
+        const cropY = (videoHeight - cropHeight) / 2;
 
-      // 从视频中心裁剪并放大绘制到canvas
-      context.drawImage(
-        video,
-        cropX, cropY, cropWidth, cropHeight,  // 源区域（裁剪）
-        0, 0, videoWidth, videoHeight          // 目标区域（全画布）
-      );
+        canvas.width = videoWidth;
+        canvas.height = videoHeight;
+
+        // 从视频中心裁剪并放大绘制到canvas
+        context.drawImage(
+          video,
+          cropX, cropY, cropWidth, cropHeight,  // 源区域（裁剪）
+          0, 0, videoWidth, videoHeight          // 目标区域（全画布）
+        );
+      }
     } else {
-      // 硬件zoom或无缩放：直接绘制
+      // 硬件zoom或zoom=1：直接绘制
       canvas.width = videoWidth;
       canvas.height = videoHeight;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -291,30 +318,53 @@ export function useCamera(): UseCameraReturn {
   }, [stopCamera]);
 
   // setZoom - 统一的缩放控制（滑杆和捏合共用）
+  // UI zoom: 0.5x ~ 3x
+  // Hardware zoom: 只支持 >= 1x
+  // 当 zoom < 1 时：纯软件缩放（缩小视野）
+  // 当 zoom >= 1 时：优先硬件zoom，失败则软件zoom
   const setZoom = useCallback((newZoom: number) => {
     const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
     
     // 更新UI状态
     setZoomState(clampedZoom);
     
-    // 前置摄像头或硬件不可用时，使用软件zoom
-    if (isFrontCamera || !hardwareZoomAvailable) {
+    // 前置摄像头：始终使用软件zoom
+    if (isFrontCamera) {
       setSoftwareZoomActive(true);
       return;
     }
     
-    // 尝试应用硬件zoom
-    if (trackRef.current && hardwareZoomAvailable) {
-      applyZoomToTrack(trackRef.current, clampedZoom).then(success => {
-        if (!success) {
-          // 硬件zoom失败，自动回退到软件zoom
+    // zoom < 1：禁用硬件zoom，使用软件缩放
+    if (clampedZoom < HARDWARE_ZOOM_MIN) {
+      // 重置硬件zoom到1x
+      if (trackRef.current && hardwareZoomAvailable) {
+        applyZoomToTrack(trackRef.current, HARDWARE_ZOOM_MIN).catch(() => {});
+      }
+      setSoftwareZoomActive(true);
+      return;
+    }
+    
+    // zoom >= 1：尝试硬件zoom
+    if (hardwareZoomAvailable && trackRef.current) {
+      // 硬件zoom值限制在硬件支持范围内
+      const hwZoom = Math.min(clampedZoom, hardwareZoomMax);
+      applyZoomToTrack(trackRef.current, hwZoom).then(success => {
+        if (success) {
+          // 硬件zoom成功
+          // 如果UI zoom > 硬件最大值，剩余部分用软件zoom
+          setSoftwareZoomActive(clampedZoom > hardwareZoomMax);
+        } else {
+          // 硬件zoom失败，回退到软件zoom
           setSoftwareZoomActive(true);
         }
       }).catch(() => {
         setSoftwareZoomActive(true);
       });
+    } else {
+      // 硬件不可用，使用软件zoom
+      setSoftwareZoomActive(true);
     }
-  }, [minZoom, maxZoom, isFrontCamera, hardwareZoomAvailable]);
+  }, [minZoom, maxZoom, isFrontCamera, hardwareZoomAvailable, hardwareZoomMax]);
 
   return {
     videoRef,
