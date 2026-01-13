@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Camera, RotateCcw, Check, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import { useCamera } from '@/hooks/useCamera';
@@ -22,7 +22,39 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
   const { state, dispatch } = useGame();
   const { playShutter, playClick } = useSound();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isPaused, setIsPaused] = useState(false); // Bug 3: 拍照后暂停视频流
+  const [isPaused, setIsPaused] = useState(false);
+  
+  // 双指捏合缩放状态
+  const initialPinchDistance = useRef<number | null>(null);
+  const initialZoom = useRef<number>(1);
+  
+  // 双指捏合缩放处理
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && supportsZoom) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      initialPinchDistance.current = distance;
+      initialZoom.current = zoom;
+    }
+  }, [zoom, supportsZoom]);
+  
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && initialPinchDistance.current && supportsZoom) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      
+      // 计算缩放比例
+      const scale = distance / initialPinchDistance.current;
+      const newZoom = Math.max(minZoom, Math.min(maxZoom, initialZoom.current * scale));
+      setZoom(newZoom);
+    }
+  }, [minZoom, maxZoom, setZoom, supportsZoom]);
+  
+  const handleTouchEnd = useCallback(() => {
+    initialPinchDistance.current = null;
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -84,7 +116,13 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
   }, [isSuccess, onAutoClose, stopCamera]);
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-black overflow-hidden">
+    <div 
+      ref={containerRef} 
+      className="relative w-full h-full bg-black overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* 隐藏的 canvas 用于截图 */}
       <canvas ref={canvasRef} className="hidden" />
 
@@ -268,16 +306,16 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
           </motion.div>
         )}
         
-        {/* 拍照按钮 */}
+        {/* 拍照按钮 - 放大版 */}
         {!isAnalyzing && !isSuccess && !isFailed && (
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={handleCapture}
             disabled={!isStreaming}
-            className="w-14 h-14 rounded-full bg-white border-4 border-[#5D4037] border-b-6 flex items-center justify-center disabled:opacity-50"
+            className="w-20 h-20 rounded-full bg-white border-4 border-[#5D4037] border-b-8 flex items-center justify-center disabled:opacity-50 shadow-lg"
           >
-            <div className="w-9 h-9 rounded-full bg-[#FF5252] border-[3px] border-[#B71C1C] flex items-center justify-center">
-              <Camera className="w-4 h-4 text-white drop-shadow-md" strokeWidth={2.5} />
+            <div className="w-14 h-14 rounded-full bg-[#FF5252] border-4 border-[#B71C1C] flex items-center justify-center">
+              <Camera className="w-7 h-7 text-white drop-shadow-md" strokeWidth={2.5} />
             </div>
           </motion.button>
         )}

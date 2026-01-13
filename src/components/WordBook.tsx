@@ -47,17 +47,37 @@ function WordDetailModal({ word, record, onClose }: { word: Word; record?: WordR
   const rarity = getRarityLabel(word.difficulty);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
-  // 播放单词读音
+  // 播放单词读音 - 兼容移动端
   const playPronunciation = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
+    
+    // 确保speechSynthesis可用
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      console.log('speechSynthesis not available');
+      return;
+    }
+    
     // 先取消之前的语音
     window.speechSynthesis.cancel();
+    
+    // 创建语音实例
     const utterance = new SpeechSynthesisUtterance(word.word.toLowerCase());
     utterance.lang = 'en-US';
     utterance.rate = 0.8;
     utterance.volume = 1;
-    window.speechSynthesis.speak(utterance);
+    
+    // iOS需要先获取voices
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoice = voices.find(v => v.lang.startsWith('en'));
+    if (englishVoice) {
+      utterance.voice = englishVoice;
+    }
+    
+    // 延迟执行以确保在移动端工作
+    setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 10);
   };
   
   // 模拟含义数据（实际应该从word.meanings获取）

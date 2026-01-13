@@ -276,7 +276,7 @@ export function ProfilePage({ onBack }: ProfilePageProps) {
             <div className="w-px bg-[#5D4037]/20" />
             <div>
               <p className="text-2xl font-black text-[#5D4037]">
-                {collectedCount > 0 ? Math.round((masteredCount / collectedCount) * 100) : 0}%
+                {collectedCount > 0 ? Math.min(100, Math.round((masteredCount / collectedCount) * 100)) : 0}%
               </p>
               <p className="text-xs text-[#1B5E20] font-bold">掌握率</p>
             </div>
