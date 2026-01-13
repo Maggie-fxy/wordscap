@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Star, X, Diamond, Lock, Sparkles, Volume2 } from 'lucide-react';
 import { useGame } from '@/context/GameContext';
 import { useSound } from '@/hooks/useSound';
+import { useTTS } from '@/hooks/useTTS';
 import { getWordById, WORD_BANK } from '@/data/wordBank';
 import { Word, WordRecord } from '@/types';
 
@@ -42,42 +43,16 @@ function CutePlus() {
 }
 
 // 单词详情弹窗
-function WordDetailModal({ word, record, onClose }: { word: Word; record?: WordRecord; onClose: () => void }) {
+function WordDetailModal({ word, record, onClose, onSpeak }: { word: Word; record?: WordRecord; onClose: () => void; onSpeak: (text: string) => void }) {
   const diamonds = getDiamondsByDifficulty(word.difficulty);
   const rarity = getRarityLabel(word.difficulty);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
-  // 播放单词读音 - 兼容移动端
+  // 播放单词读音 - 使用有道词典API（与狩猎页面一致）
   const playPronunciation = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    
-    // 确保speechSynthesis可用
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      console.log('speechSynthesis not available');
-      return;
-    }
-    
-    // 先取消之前的语音
-    window.speechSynthesis.cancel();
-    
-    // 创建语音实例
-    const utterance = new SpeechSynthesisUtterance(word.word.toLowerCase());
-    utterance.lang = 'en-US';
-    utterance.rate = 0.8;
-    utterance.volume = 1;
-    
-    // iOS需要先获取voices
-    const voices = window.speechSynthesis.getVoices();
-    const englishVoice = voices.find(v => v.lang.startsWith('en'));
-    if (englishVoice) {
-      utterance.voice = englishVoice;
-    }
-    
-    // 延迟执行以确保在移动端工作
-    setTimeout(() => {
-      window.speechSynthesis.speak(utterance);
-    }, 10);
+    onSpeak(word.word);
   };
   
   // 模拟含义数据（实际应该从word.meanings获取）
@@ -326,6 +301,7 @@ export function WordBook({ onBack }: WordBookProps) {
   const { state } = useGame();
   const { userData } = state;
   const { playClick } = useSound();
+  const { speakEnglish } = useTTS();
   const [selectedWord, setSelectedWord] = useState<{ word: Word; record?: WordRecord } | null>(null);
 
   // 获取所有单词，区分已收集和未收集
@@ -502,6 +478,7 @@ export function WordBook({ onBack }: WordBookProps) {
             word={selectedWord.word}
             record={selectedWord.record}
             onClose={() => setSelectedWord(null)}
+            onSpeak={speakEnglish}
           />
         )}
       </AnimatePresence>

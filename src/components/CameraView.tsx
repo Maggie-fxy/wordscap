@@ -17,8 +17,8 @@ interface CameraViewProps {
 }
 
 export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, onAutoClose }: CameraViewProps) {
-  const { videoRef, canvasRef, isStreaming, isFrontCamera, error, zoom, minZoom, maxZoom, zoomSupported, setZoom, startCamera, stopCamera, captureImage } = useCamera();
-  // 显示UI的条件：后置摄像头 + 范围有效（即使硬件不支持也显示UI，graceful fallback）
+  const { videoRef, canvasRef, isStreaming, isFrontCamera, error, zoom, minZoom, maxZoom, hardwareZoomAvailable, softwareZoomActive, setZoom, startCamera, stopCamera, captureImage } = useCamera();
+  // 显示UI的条件：后置摄像头 + 范围有效
   const showZoomUI = !isFrontCamera && maxZoom > minZoom;
   const { state, dispatch } = useGame();
   const { playShutter, playClick } = useSound();
@@ -138,14 +138,17 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
       {/* 隐藏的 canvas 用于截图 */}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* 相机预览 - 只有前置摄像头才镜像 */}
+      {/* 相机预览 - 软件zoom时使用CSS transform放大 */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
         className={`camera-feed ${isAnalyzing ? 'blur-sm' : ''}`}
-        style={{ transform: isFrontCamera ? 'scaleX(-1)' : 'none' }}
+        style={{ 
+          transform: `${isFrontCamera ? 'scaleX(-1)' : ''} ${softwareZoomActive && zoom > 1 ? `scale(${zoom})` : ''}`.trim() || 'none',
+          transformOrigin: 'center center'
+        }}
       />
 
       {/* 扫描动画覆盖层 */}
@@ -301,7 +304,7 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1.5 ${!zoomSupported ? 'opacity-60' : ''}`}
+            className={`flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1.5 ${softwareZoomActive ? 'opacity-80' : ''}`}
           >
             <ZoomOut className="w-4 h-4 text-white" strokeWidth={2} />
             <input
