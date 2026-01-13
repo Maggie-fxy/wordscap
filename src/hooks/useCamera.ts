@@ -2,15 +2,21 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 
+// 扩展 MediaTrackCapabilities 类型以支持 zoom
+interface ZoomCapabilities {
+  zoom?: { min: number; max: number; step?: number };
+}
+
 interface UseCameraReturn {
   videoRef: React.RefObject<HTMLVideoElement>;
   canvasRef: React.RefObject<HTMLCanvasElement>;
   isStreaming: boolean;
-  isFrontCamera: boolean; // 是否是前置摄像头
+  isFrontCamera: boolean;
   error: string | null;
   zoom: number;
   minZoom: number;
   maxZoom: number;
+  zoomSupported: boolean; // 是否真正支持硬件zoom
   setZoom: (zoom: number) => void;
   startCamera: () => Promise<void>;
   stopCamera: () => void;
@@ -23,12 +29,34 @@ export function useCamera(): UseCameraReturn {
   const streamRef = useRef<MediaStream | null>(null);
   const isStartingRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isFrontCamera, setIsFrontCamera] = useState(false); // 默认后置摄像头
+  const [isFrontCamera, setIsFrontCamera] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoomState] = useState(1);
   const [minZoom, setMinZoom] = useState(1);
-  const [maxZoom, setMaxZoom] = useState(1);
+  const [maxZoom, setMaxZoom] = useState(4); // 默认提供4x范围给UI显示
+  const [zoomSupported, setZoomSupported] = useState(false); // 硬件是否真正支持
   const trackRef = useRef<MediaStreamTrack | null>(null);
+
+  // 应用zoom到视频轨道 - 兼容Android WebView/华为浏览器
+  const applyZoomToTrack = async (track: MediaStreamTrack, zoomValue: number): Promise<boolean> => {
+    // 方法1: 使用 advanced constraints (标准方式)
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: zoomValue } as MediaTrackConstraintSet] });
+      return true;
+    } catch (e1) {
+      console.log('Advanced zoom failed, trying direct:', e1);
+    }
+    
+    // 方法2: 直接设置zoom约束 (某些Android WebView)
+    try {
+      await track.applyConstraints({ zoom: zoomValue } as MediaTrackConstraints);
+      return true;
+    } catch (e2) {
+      console.log('Direct zoom also failed:', e2);
+    }
+    
+    return false;
+  };
 
   const startCamera = useCallback(async () => {
     // 防止重复启动
@@ -74,17 +102,39 @@ export function useCamera(): UseCameraReturn {
       trackRef.current = videoTrack;
       
       if (videoTrack) {
-        const capabilities = videoTrack.getCapabilities?.() as MediaTrackCapabilities & { zoom?: { min: number; max: number } };
-        if (capabilities?.zoom) {
-          const min = capabilities.zoom.min || 1;
-          const max = capabilities.zoom.max || 1;
-          setMinZoom(min);
-          setMaxZoom(max);
-          setZoomState(min); // 默认最小缩放（1x）
-          // 立即应用1x缩放
+        // 检测zoom能力 - 兼容各种浏览器
+        let hasZoomSupport = false;
+        let detectedMin = 1;
+        let detectedMax = 1;
+        
+        try {
+          const capabilities = videoTrack.getCapabilities?.() as MediaTrackCapabilities & ZoomCapabilities;
+          if (capabilities?.zoom && capabilities.zoom.max > capabilities.zoom.min) {
+            detectedMin = capabilities.zoom.min || 1;
+            detectedMax = capabilities.zoom.max || 1;
+            hasZoomSupport = detectedMax > detectedMin;
+          }
+        } catch (e) {
+          console.log('getCapabilities failed:', e);
+        }
+        
+        // 设置zoom范围 - 即使不支持也提供UI范围
+        if (hasZoomSupport) {
+          setMinZoom(detectedMin);
+          setMaxZoom(detectedMax);
+          setZoomSupported(true);
+        } else {
+          // 不支持时提供默认范围给UI，但标记为不支持
+          setMinZoom(1);
+          setMaxZoom(4);
+          setZoomSupported(false);
+        }
+        setZoomState(1); // 默认1x
+        
+        // 尝试应用初始zoom（仅当支持时）
+        if (hasZoomSupport) {
           try {
-            (videoTrack as MediaStreamTrack & { applyConstraints: (c: { advanced: Array<{ zoom: number }> }) => Promise<void> })
-              .applyConstraints({ advanced: [{ zoom: min }] });
+            await applyZoomToTrack(videoTrack, detectedMin);
           } catch (e) {
             console.log('Initial zoom apply failed:', e);
           }
@@ -209,18 +259,25 @@ export function useCamera(): UseCameraReturn {
     };
   }, [stopCamera]);
 
+  // setZoom - 统一的缩放控制（滑杆和捏合共用）
   const setZoom = useCallback((newZoom: number) => {
-    if (trackRef.current && maxZoom > 1) {
-      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
-      try {
-        (trackRef.current as MediaStreamTrack & { applyConstraints: (constraints: { advanced: Array<{ zoom: number }> }) => Promise<void> })
-          .applyConstraints({ advanced: [{ zoom: clampedZoom }] });
-        setZoomState(clampedZoom);
-      } catch (e) {
-        console.log('Zoom not supported:', e);
-      }
+    // 前置摄像头禁用zoom
+    if (isFrontCamera) {
+      return;
     }
-  }, [minZoom, maxZoom]);
+    
+    const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+    
+    // 先更新UI状态（即使硬件不支持也更新，graceful fallback）
+    setZoomState(clampedZoom);
+    
+    // 尝试应用硬件zoom
+    if (trackRef.current && zoomSupported) {
+      applyZoomToTrack(trackRef.current, clampedZoom).catch(() => {
+        // 静默失败 - UI已更新
+      });
+    }
+  }, [minZoom, maxZoom, isFrontCamera, zoomSupported]);
 
   return {
     videoRef,
@@ -231,6 +288,7 @@ export function useCamera(): UseCameraReturn {
     zoom,
     minZoom,
     maxZoom,
+    zoomSupported,
     setZoom,
     startCamera,
     stopCamera,

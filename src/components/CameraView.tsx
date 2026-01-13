@@ -17,8 +17,9 @@ interface CameraViewProps {
 }
 
 export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, onAutoClose }: CameraViewProps) {
-  const { videoRef, canvasRef, isStreaming, isFrontCamera, error, zoom, minZoom, maxZoom, setZoom, startCamera, stopCamera, captureImage } = useCamera();
-  const supportsZoom = maxZoom > minZoom;
+  const { videoRef, canvasRef, isStreaming, isFrontCamera, error, zoom, minZoom, maxZoom, zoomSupported, setZoom, startCamera, stopCamera, captureImage } = useCamera();
+  // 显示UI的条件：后置摄像头 + 范围有效（即使硬件不支持也显示UI，graceful fallback）
+  const showZoomUI = !isFrontCamera && maxZoom > minZoom;
   const { state, dispatch } = useGame();
   const { playShutter, playClick } = useSound();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -27,32 +28,41 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
   // 双指捏合缩放状态
   const initialPinchDistance = useRef<number | null>(null);
   const initialZoom = useRef<number>(1);
+  const isPinching = useRef(false);
   
-  // 双指捏合缩放处理
+  // 双指捏合缩放处理 - 防止浏览器页面缩放劫持
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2 && supportsZoom) {
+    if (e.touches.length === 2 && showZoomUI) {
+      // 阻止浏览器默认缩放行为
+      e.preventDefault();
+      isPinching.current = true;
+      
       const touch1 = e.touches[0];
       const touch2 = e.touches[1];
       const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
       initialPinchDistance.current = distance;
       initialZoom.current = zoom;
     }
-  }, [zoom, supportsZoom]);
+  }, [zoom, showZoomUI]);
   
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2 && initialPinchDistance.current && supportsZoom) {
+    if (e.touches.length === 2 && isPinching.current && initialPinchDistance.current) {
+      // 阻止浏览器默认缩放行为
+      e.preventDefault();
+      
       const touch1 = e.touches[0];
       const touch2 = e.touches[1];
       const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
       
-      // 计算缩放比例
+      // 计算缩放比例，平滑处理
       const scale = distance / initialPinchDistance.current;
       const newZoom = Math.max(minZoom, Math.min(maxZoom, initialZoom.current * scale));
       setZoom(newZoom);
     }
-  }, [minZoom, maxZoom, setZoom, supportsZoom]);
+  }, [minZoom, maxZoom, setZoom]);
   
   const handleTouchEnd = useCallback(() => {
+    isPinching.current = false;
     initialPinchDistance.current = null;
   }, []);
 
@@ -119,6 +129,8 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
     <div 
       ref={containerRef} 
       className="relative w-full h-full bg-black overflow-hidden"
+      // touch-action: none 防止浏览器劫持pinch缩放
+      style={{ touchAction: 'none' }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -284,12 +296,12 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
 
       {/* 底部控制栏 - 拍照按钮和缩放控制 */}
       <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center gap-3">
-        {/* 缩放控制条 */}
-        {!isAnalyzing && !isSuccess && !isFailed && supportsZoom && (
+        {/* 缩放控制条 - 后置摄像头且非分析状态时显示 */}
+        {!isAnalyzing && !isSuccess && !isFailed && showZoomUI && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1.5"
+            className={`flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1.5 ${!zoomSupported ? 'opacity-60' : ''}`}
           >
             <ZoomOut className="w-4 h-4 text-white" strokeWidth={2} />
             <input
@@ -299,10 +311,10 @@ export function CameraView({ onCapture, onClose, onForceSuccess, analyzingText, 
               step={0.1}
               value={zoom}
               onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="w-24 h-1 accent-white cursor-pointer"
+              className="w-28 h-1.5 accent-white cursor-pointer"
             />
             <ZoomIn className="w-4 h-4 text-white" strokeWidth={2} />
-            <span className="text-white text-xs font-bold min-w-[28px]">{zoom.toFixed(1)}x</span>
+            <span className="text-white text-xs font-bold min-w-[32px]">{zoom.toFixed(1)}x</span>
           </motion.div>
         )}
         
